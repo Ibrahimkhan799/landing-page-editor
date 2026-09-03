@@ -17,7 +17,7 @@ function PopoverContent({
   align = "start",
   side = "left",
   sideOffset = 8,
-  collisionPadding = 16,
+  collisionPadding = 24,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (

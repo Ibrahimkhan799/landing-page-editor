@@ -21,7 +21,7 @@ import type { NodeMeta, StyleProps } from "@/lib/types";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-0.5">
       <Label className="text-[11px] text-zinc-500">{label}</Label>
       {children}
     </div>
@@ -47,7 +47,7 @@ function SelectField({
   return (
     <Field label={label}>
       <Select value={current} onValueChange={onChange}>
-        <SelectTrigger className="h-7 text-xs">
+        <SelectTrigger className="h-6 text-[11px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -111,7 +111,7 @@ export function StyleEditor({
   const fontValue = current.fontFamily || "__inherit__";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <SectionTitle>Fill & stroke</SectionTitle>
       <FillPopover styles={current} computed={live} onChange={patch} swatches={swatches} />
       <ColorField
@@ -169,7 +169,7 @@ export function StyleEditor({
           value={fontValue}
           onValueChange={(fontFamily) => patch({ fontFamily: fontFamily === "__inherit__" ? "" : fontFamily })}
         >
-          <SelectTrigger className="h-7 text-xs">
+          <SelectTrigger className="h-6 text-[11px]">
             <SelectValue placeholder="Inherit" />
           </SelectTrigger>
           <SelectContent>

@@ -213,7 +213,7 @@ export function LandingSection({
                 key={`${item.title}-${index}`}
                 className="border p-6"
                 style={{
-                  background: "var(--lp-card)",
+                  backgroundColor: "var(--lp-card)",
                   borderColor: "var(--lp-border)",
                   borderRadius: "var(--lp-radius)",
                 }}
@@ -221,7 +221,7 @@ export function LandingSection({
                 <div
                   className="mb-4 grid h-10 w-10 place-items-center text-sm font-semibold"
                   style={{
-                    background: "var(--lp-primary)",
+                    backgroundColor: "var(--lp-primary)",
                     color: "var(--lp-primary-fg)",
                     borderRadius: "calc(var(--lp-radius) - 4px)",
                   }}
@@ -291,7 +291,7 @@ export function LandingSection({
               <blockquote
                 key={item.name}
                 className="border p-6"
-                style={{ background: "var(--lp-card)", borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
+                style={{ backgroundColor: "var(--lp-card)", borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
               >
                 <p className="leading-7">“{item.quote}”</p>
                 <footer className="mt-5 text-sm">
@@ -321,7 +321,7 @@ export function LandingSection({
                 key={plan.name}
                 className="flex flex-col border p-6"
                 style={{
-                  background: "var(--lp-card)",
+                  backgroundColor: "var(--lp-card)",
                   borderColor: plan.highlighted ? "var(--lp-primary)" : "var(--lp-border)",
                   borderRadius: "var(--lp-radius)",
                   boxShadow: plan.highlighted ? "0 16px 40px color-mix(in srgb, var(--lp-primary) 18%, transparent)" : undefined,
@@ -349,7 +349,7 @@ export function LandingSection({
                   href="#contact"
                   className="mt-6 inline-flex h-10 items-center justify-center rounded-[var(--lp-radius)] px-4 text-sm font-medium"
                   style={{
-                    background: plan.highlighted ? "var(--lp-primary)" : "var(--lp-muted)",
+                    backgroundColor: plan.highlighted ? "var(--lp-primary)" : "var(--lp-muted)",
                     color: plan.highlighted ? "var(--lp-primary-fg)" : "var(--lp-fg)",
                   }}
                 >
@@ -372,7 +372,7 @@ export function LandingSection({
               <details
                 key={item.question}
                 className="border p-4"
-                style={{ borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)", background: "var(--lp-card)" }}
+                style={{ borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)", backgroundColor: "var(--lp-card)" }}
               >
                 <summary className="cursor-pointer font-medium">{item.question}</summary>
                 <p className="mt-3 text-sm leading-6" style={{ color: "var(--lp-muted-fg)" }}>
@@ -438,7 +438,7 @@ export function LandingSection({
           <div
             className="px-8 py-14 text-center"
             style={{
-              background: "var(--lp-secondary)",
+              backgroundColor: "var(--lp-secondary)",
               color: "var(--lp-secondary-fg)",
               borderRadius: "calc(var(--lp-radius) + 8px)",
             }}
@@ -480,7 +480,7 @@ export function LandingSection({
             </div>
             <div
               className="space-y-4 border p-6"
-              style={{ background: "var(--lp-card)", borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
+              style={{ backgroundColor: "var(--lp-card)", borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
             >
               {stack("form")}
             </div>

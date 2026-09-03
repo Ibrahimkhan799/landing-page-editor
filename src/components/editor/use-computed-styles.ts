@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { readComputedStyleProps } from "@/lib/computed-styles";
 import type { StyleProps } from "@/lib/types";
 
-export function useComputedStyles(nodeId: string | null, revision: unknown) {
+export function useComputedStyles(nodeId: string | null, revision: unknown, resetKey = "") {
   const [snapshot, setSnapshot] = useState<{
     id: string | null;
+    resetKey: string;
     computed: StyleProps;
     box: { width: number; height: number };
-  }>({ id: null, computed: {}, box: { width: 0, height: 0 } });
+  }>({ id: null, resetKey: "", computed: {}, box: { width: 0, height: 0 } });
 
   useEffect(() => {
     if (!nodeId) return;
@@ -27,6 +28,7 @@ export function useComputedStyles(nodeId: string | null, revision: unknown) {
       if (!el || cancelled) return;
       setSnapshot({
         id: nodeId,
+        resetKey,
         computed: readComputedStyleProps(el),
         box: {
           width: Math.round(el.getBoundingClientRect().width),
@@ -35,16 +37,16 @@ export function useComputedStyles(nodeId: string | null, revision: unknown) {
       });
     };
     const frame = requestAnimationFrame(read);
-    const later = window.setTimeout(read, 120);
+    const later = window.setTimeout(read, 80);
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
       window.clearTimeout(later);
     };
-  }, [nodeId, revision]);
+  }, [nodeId, revision, resetKey]);
 
-  if (snapshot.id !== nodeId) {
-    return { computed: {} as StyleProps, box: { width: 0, height: 0 } };
+  if (snapshot.id !== nodeId || snapshot.resetKey !== resetKey) {
+    return { computed: {} as StyleProps, box: snapshot.id === nodeId ? snapshot.box : { width: 0, height: 0 } };
   }
   return { computed: snapshot.computed, box: snapshot.box };
 }

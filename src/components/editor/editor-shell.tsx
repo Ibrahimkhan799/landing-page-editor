@@ -150,10 +150,24 @@ export function EditorShell() {
             </button>
           ))}
         </div>
-        <Button asChild variant="ghost" size="icon" className="size-8 text-zinc-500">
-          <Link href={`/p/${page.slug}`} target="_blank" title="View live">
-            <ExternalLink className="size-4" />
-          </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-zinc-500"
+          title="View live"
+          onClick={async () => {
+            if (dirty) {
+              try {
+                await save();
+              } catch {
+                toast.error("Save the page before previewing");
+                return;
+              }
+            }
+            window.open(`/p/${page.slug}`, "_blank", "noopener,noreferrer");
+          }}
+        >
+          <ExternalLink className="size-4" />
         </Button>
         <Button size="sm" className="h-8 px-3" onClick={persist} disabled={saving}>
           <Save className="size-3.5" />

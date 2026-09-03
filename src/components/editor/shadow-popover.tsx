@@ -22,7 +22,7 @@ export function parseShadow(value?: string): ShadowValue {
     return { inset: false, x: 0, y: 4, blur: 16, spread: 0, color: "#000000" };
   }
   const inset = /\binset\b/.test(value);
-  const color = rgbToHex(value) || "#000000";
+  const color = value.match(/#(?:[0-9a-f]{3,8})|rgba?\([^)]+\)/i)?.[0] || rgbToHex(value) || "#000000";
   const nums = [...value.matchAll(/-?\d+(?:\.\d+)?px/g)].map((match) => Number.parseFloat(match[0]));
   return {
     inset,

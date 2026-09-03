@@ -80,11 +80,12 @@ export function ColorPickerBody({
       <div className="flex items-center gap-2">
         <span className="w-8 text-[10px] uppercase tracking-wide text-zinc-400">Alpha</span>
         <Slider
+          className="h-5"
           min={0}
           max={100}
           step={1}
-          value={[Math.round(alpha * 100)]}
-          onValueChange={([next]) => onChange(paintValue(hex, next / 100))}
+          value={[Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)]}
+          onValueChange={([next]) => onChange(paintValue(hex, (next ?? 0) / 100))}
         />
       </div>
       {swatches?.length ? (

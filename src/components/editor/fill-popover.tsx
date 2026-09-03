@@ -5,7 +5,7 @@ import { ColorPickerBody, ColorSwatch } from "@/components/editor/color-field";
 import { GradientField } from "@/components/editor/gradient-field";
 import { MediaPicker } from "@/components/editor/media-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { rgbToHex } from "@/lib/computed-styles";
+import { parseCssColor, rgbToHex } from "@/lib/computed-styles";
 import type { StyleProps } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,10 @@ export function FillPopover({
   swatches?: string[];
 }) {
   const stored = styles.background || "";
-  const hex = rgbToHex(stored || computed.background || "") || stored;
+  const raw = stored || computed.background || "";
+  const parsed = parseCssColor(raw);
+  const hex = parsed?.hex || rgbToHex(raw) || stored;
+  const alpha = parsed?.alpha ?? 1;
   const inherited = !styles.background && !styles.backgroundImage;
   const detected = detectMode(styles, computed);
   const [mode, setMode] = useState<FillMode | null>(null);
@@ -78,6 +81,7 @@ export function FillPopover({
             />
             <span className="flex-1 truncate font-mono text-[11px] text-zinc-700">
               {fillLabel(detected, hex)}
+              {detected === "solid" && hex && alpha < 0.995 ? ` ${Math.round(alpha * 100)}%` : ""}
             </span>
           </button>
         </PopoverTrigger>
@@ -110,7 +114,7 @@ export function FillPopover({
           <div className="p-3">
             {currentMode === "solid" ? (
               <ColorPickerBody
-                color={hex || "#ffffff"}
+                color={raw || "#ffffff"}
                 onChange={(background) => onChange({ background, backgroundImage: "" })}
                 swatches={swatches}
               />

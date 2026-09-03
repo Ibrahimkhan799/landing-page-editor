@@ -31,8 +31,8 @@ import { cn } from "@/lib/utils";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-zinc-500">{label}</Label>
       {children}
     </div>
   );
@@ -431,14 +431,18 @@ function StyleTab() {
   } = useEditor();
   const node = selectedElement ?? (selectedElements.length ? selectedElements[0] : selectedSection);
   const nodeId = node && "type" in node && selectedElement ? selectedElement.id : selectedSection?.id ?? null;
-  const { computed } = useComputedStyles(nodeId, [
-    page,
-    breakpoint,
-    previewState,
-    node && "styles" in node ? node.styles : null,
-    node && "states" in node ? node.states : null,
-    node && "responsive" in node ? node.responsive : null,
-  ]);
+  const { computed } = useComputedStyles(
+    nodeId,
+    [
+      page,
+      breakpoint,
+      previewState,
+      node && "styles" in node ? node.styles : null,
+      node && "states" in node ? node.states : null,
+      node && "responsive" in node ? node.responsive : null,
+    ],
+    `${nodeId}-${breakpoint}-${previewState}`,
+  );
   const swatches = Object.values(page.theme.colors);
   const showStates = selectedElement?.type === "button";
   const states: { id: InteractionState; label: string }[] = [

@@ -49,6 +49,17 @@ function serialize(kind: string, angle: string, stops: Stop[]) {
   return kind === "radial" ? `radial-gradient(circle, ${inner})` : `linear-gradient(${angle}, ${inner})`;
 }
 
+function nextStop(stops: Stop[]): Stop {
+  const percents = stops.map((stop) => Number.parseFloat(stop.at) || 0);
+  const last = stops[stops.length - 1];
+  const prev = stops[stops.length - 2] ?? stops[0];
+  const mid = Math.round(((Number.parseFloat(prev.at) || 0) + (Number.parseFloat(last.at) || 100)) / 2);
+  const taken = new Set(percents);
+  let at = Number.isFinite(mid) ? mid : 50;
+  while (taken.has(at) && at < 100) at += 5;
+  return { color: last.color, at: `${at}%` };
+}
+
 export function GradientField({
   label,
   value,
@@ -98,6 +109,30 @@ export function GradientField({
           <div />
         )}
       </div>
+      {parsed.kind === "linear" ? (
+        <input
+          type="range"
+          min={0}
+          max={360}
+          value={Number.parseInt(parsed.angle, 10) || 0}
+          onChange={(event) => update({ angle: `${event.target.value}deg` })}
+          className="h-4 w-full accent-zinc-900"
+        />
+      ) : null}
+      <button
+        type="button"
+        className="h-6 rounded-sm text-[11px] text-zinc-500 hover:bg-zinc-100"
+        onClick={() =>
+          update({
+            stops: [...parsed.stops].reverse().map((stop, index) => ({
+              color: stop.color,
+              at: parsed.stops[index]?.at ?? stop.at,
+            })),
+          })
+        }
+      >
+        Reverse colors
+      </button>
       <div className="grid gap-1">
         {parsed.stops.map((stop, index) => (
           <div key={`${stop.color}-${index}`} className="flex items-center gap-1">
@@ -129,15 +164,11 @@ export function GradientField({
           </div>
         ))}
       </div>
-      {parsed.stops.length < 4 ? (
+      {parsed.stops.length < 5 ? (
         <button
           type="button"
           className="flex h-6 items-center justify-center gap-1 rounded-sm text-[11px] text-zinc-500 hover:bg-zinc-100"
-          onClick={() =>
-            update({
-              stops: [...parsed.stops, { color: "#134e4a", at: "50%" }],
-            })
-          }
+          onClick={() => update({ stops: [...parsed.stops, nextStop(parsed.stops)] })}
         >
           <Plus className="size-3" />
           Add color

@@ -87,7 +87,7 @@ function Overlay({
         boxRef.current = node;
       }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group/overlay relative", isDragging && "z-30 opacity-40")}
+      className={cn("group/overlay relative overflow-visible", isDragging && "z-30 opacity-40")}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(event);
@@ -117,7 +117,7 @@ function Overlay({
           "absolute z-20 flex h-4 items-center gap-0.5",
           selected ? "opacity-100" : chrome ? "opacity-0 group-hover/overlay:opacity-100" : "opacity-0",
         )}
-        style={{ top: Math.max(0, box.top) - 18, left: box.left }}
+        style={{ top: box.top - 18, left: box.left }}
       >
         <span className="rounded-sm bg-[#0d99ff] px-1 text-[9px] font-medium leading-4 text-white">{label}</span>
         {chrome ? (

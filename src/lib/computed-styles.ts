@@ -5,14 +5,20 @@ export function parseCssColor(input: string): { hex: string; alpha: number } | n
   if (!value || value === "transparent" || value === "none") return { hex: "", alpha: 0 };
   if (value.startsWith("#")) {
     const hex =
-      value.length === 4
+      value.length === 4 || value.length === 5
         ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`.toLowerCase()
         : value.slice(0, 7).toLowerCase();
     const alpha =
-      value.length === 9 ? Number.parseInt(value.slice(7, 9), 16) / 255 : value.length === 5 ? Number.parseInt(value[4] + value[4], 16) / 255 : 1;
+      value.length === 9
+        ? Number.parseInt(value.slice(7, 9), 16) / 255
+        : value.length === 5
+          ? Number.parseInt(value[4] + value[4], 16) / 255
+          : 1;
     return { hex, alpha: Number.isFinite(alpha) ? alpha : 1 };
   }
-  const match = value.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i);
+  const match = value.match(
+    /rgba?\(\s*([\d.]+)%?(?:[\s,]+([\d.]+)%?)(?:[\s,]+([\d.]+)%?)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i,
+  );
   if (!match) return null;
   const alpha = match[4] === undefined ? 1 : match[4].endsWith("%") ? Number.parseFloat(match[4]) / 100 : Number(match[4]);
   const hex = `#${[match[1], match[2], match[3]]
@@ -28,8 +34,8 @@ export function rgbToHex(input: string): string {
 function ownPaintedColor(el: HTMLElement, property: "backgroundColor" | "color"): string {
   if (el.closest("[data-editor-chrome]")) return "";
   const parsed = parseCssColor(getComputedStyle(el)[property]);
-  if (parsed?.hex) return parsed.hex;
-  return "";
+  if (!parsed?.hex || parsed.alpha < 0.01) return "";
+  return parsed.alpha < 0.995 ? hexToRgba(parsed.hex, parsed.alpha) : parsed.hex;
 }
 
 function opaqueFill(el: HTMLElement): string {
