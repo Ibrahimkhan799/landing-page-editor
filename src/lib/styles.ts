@@ -34,7 +34,10 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
   assign(out, "minHeight", styles.minHeight);
   assign(out, "maxHeight", styles.maxHeight);
   assign(out, "color", styles.color);
-  assign(out, "background", styles.background);
+  if (styles.background) {
+    if (/gradient|url\(/i.test(styles.background)) assign(out, "backgroundImage", styles.background);
+    else assign(out, "backgroundColor", styles.background);
+  }
   assign(out, "backgroundImage", styles.backgroundImage);
   assign(out, "fontFamily", styles.fontFamily);
   assign(out, "fontSize", styles.fontSize);

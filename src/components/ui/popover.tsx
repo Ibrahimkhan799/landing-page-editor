@@ -14,15 +14,21 @@ function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimiti
 
 function PopoverContent({
   className,
-  align = "center",
-  sideOffset = 4,
+  align = "start",
+  side = "left",
+  sideOffset = 8,
+  collisionPadding = 24,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         align={align}
+        side={side}
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
+        avoidCollisions
+        sticky="partial"
         className={cn(
           "z-50 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md outline-none",
           className,

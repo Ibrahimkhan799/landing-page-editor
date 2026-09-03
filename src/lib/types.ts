@@ -12,7 +12,8 @@ export type ElementType =
   | "image"
   | "video"
   | "separator"
-  | "card";
+  | "card"
+  | "frame";
 
 export type SectionType =
   | "navbar"

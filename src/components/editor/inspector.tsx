@@ -25,14 +25,14 @@ import {
 } from "@/components/ui/select";
 import { slotDefs, textSlot } from "@/lib/slots";
 import { cloneSection } from "@/lib/defaults";
-import { editingBucket } from "@/lib/node-styles";
+import { editingBucket, mergeStyles, resolveNodeStyles } from "@/lib/node-styles";
 import type { InteractionState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-zinc-500">{label}</Label>
       {children}
     </div>
   );
@@ -66,7 +66,7 @@ export function Inspector() {
   const multi = selectedElements.length > 1;
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white">
+    <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white">
       <Tabs defaultValue="style" className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-zinc-200 px-2 py-1.5">
           <TabsList className="grid h-7 w-full grid-cols-3 bg-zinc-100 p-0.5">
@@ -431,7 +431,18 @@ function StyleTab() {
   } = useEditor();
   const node = selectedElement ?? (selectedElements.length ? selectedElements[0] : selectedSection);
   const nodeId = node && "type" in node && selectedElement ? selectedElement.id : selectedSection?.id ?? null;
-  const { computed } = useComputedStyles(nodeId, page);
+  const { computed } = useComputedStyles(
+    nodeId,
+    [
+      page,
+      breakpoint,
+      previewState,
+      node && "styles" in node ? node.styles : null,
+      node && "states" in node ? node.states : null,
+      node && "responsive" in node ? node.responsive : null,
+    ],
+    `${nodeId}-${breakpoint}-${previewState}`,
+  );
   const swatches = Object.values(page.theme.colors);
   const showStates = selectedElement?.type === "button";
   const states: { id: InteractionState; label: string }[] = [
@@ -445,6 +456,8 @@ function StyleTab() {
     return <p className="text-[12px] text-zinc-400">Select a layer to edit styles.</p>;
   }
 
+  const resolved = resolveNodeStyles(node, breakpoint, previewState);
+  const live = mergeStyles(computed, resolved);
   const local = editingBucket(node, breakpoint, previewState);
   const bucketLabel =
     previewState !== "default"
@@ -478,7 +491,7 @@ function StyleTab() {
       <NodeMetaEditor
         key={`${"id" in node ? node.id : "node"}-${breakpoint}-${previewState}`}
         node={{ ...node, styles: local }}
-        computed={computed}
+        computed={live}
         swatches={swatches}
         onChange={(patch) => {
           if (patch.styles) {

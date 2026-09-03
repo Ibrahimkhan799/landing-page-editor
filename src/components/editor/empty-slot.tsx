@@ -30,13 +30,13 @@ export function EmptySlot({
         setSelection({ kind: "slot", sectionId, slotId: slot.id });
       }}
       className={cn(
-        "flex w-full items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs transition",
-        compact ? "min-h-9 py-2" : "min-h-14 py-4",
+        "flex w-full items-center justify-center rounded-md border border-dashed px-3 text-[11px] transition",
+        compact ? "min-h-8 py-1.5" : "min-h-11 py-3",
         isOver
-          ? "border-teal-500 bg-teal-50 text-teal-800"
+          ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
           : selected
-            ? "border-teal-600 bg-teal-50/70 text-teal-800"
-            : "border-slate-300 bg-white/70 text-slate-500 hover:border-teal-400 hover:text-teal-800",
+            ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
+            : "border-zinc-300 text-zinc-400 hover:border-[#0d99ff]/70",
       )}
     >
       {compact ? `Add to ${slot.label}` : `Drop ${slot.accept?.join(" / ") ?? "an element"} into “${slot.label}”`}

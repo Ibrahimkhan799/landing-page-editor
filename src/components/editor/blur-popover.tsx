@@ -30,11 +30,11 @@ export function BlurPopover({
       <p className="text-xs text-muted-foreground">Blur</p>
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" className="flex h-8 items-center justify-between rounded-md border bg-background px-2 text-xs">
+          <button type="button" className="flex h-6 w-full items-center justify-between rounded-sm bg-zinc-100 px-1.5 text-[11px]">
             <span>Layer {layerValue} · Backdrop {backdropValue}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[240px] space-y-3 p-3">
+        <PopoverContent className="w-[240px] space-y-3 p-3">
           <p className="text-xs font-medium">Blur</p>
           <div className="grid gap-1">
             <div className="flex items-center justify-between">

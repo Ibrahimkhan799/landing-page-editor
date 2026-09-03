@@ -22,7 +22,7 @@ export function parseShadow(value?: string): ShadowValue {
     return { inset: false, x: 0, y: 4, blur: 16, spread: 0, color: "#000000" };
   }
   const inset = /\binset\b/.test(value);
-  const color = rgbToHex(value) || "#000000";
+  const color = value.match(/#(?:[0-9a-f]{3,8})|rgba?\([^)]+\)/i)?.[0] || rgbToHex(value) || "#000000";
   const nums = [...value.matchAll(/-?\d+(?:\.\d+)?px/g)].map((match) => Number.parseFloat(match[0]));
   return {
     inset,
@@ -93,14 +93,14 @@ export function ShadowPopover({
       </div>
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" className="flex h-8 items-center gap-2 rounded-md border bg-background px-2 text-left">
+          <button type="button" className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left">
             <ColorSwatch color={preview ? parsed.color : ""} />
             <span className="flex-1 truncate text-xs">
               {preview ? `${parsed.inset ? "Inner · " : ""}${parsed.x}, ${parsed.y}, ${parsed.blur}` : "None"}
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[240px] space-y-3 p-3">
+        <PopoverContent className="w-[240px] space-y-3 p-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium">Drop shadow</p>
             <button type="button" className="text-[11px] text-muted-foreground" onClick={() => onChange("")}>

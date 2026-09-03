@@ -4,21 +4,23 @@ import { HexColorInput, HexColorPicker } from "react-colorful";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
-import { hexToRgba, rgbToHex } from "@/lib/computed-styles";
+import { hexToRgba, parseCssColor, rgbToHex } from "@/lib/computed-styles";
 import { cn } from "@/lib/utils";
 
 function normalize(value?: string) {
   if (!value) return "";
-  if (value.startsWith("#") || value.startsWith("rgb")) return rgbToHex(value) || value;
   if (value.startsWith("var(")) return "";
   return rgbToHex(value) || "";
 }
 
-function parseAlpha(value?: string) {
+function readAlpha(value?: string) {
   if (!value) return 1;
-  const match = value.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/i);
-  if (!match) return 1;
-  return Number(match[1]);
+  return parseCssColor(value)?.alpha ?? 1;
+}
+
+function paintValue(hex: string, alpha: number) {
+  if (alpha >= 0.995) return hex;
+  return hexToRgba(hex, alpha);
 }
 
 export function ColorSwatch({
@@ -33,7 +35,7 @@ export function ColorSwatch({
   return (
     <span
       className={cn(
-        "inline-block size-4 shrink-0 rounded-[3px] border border-black/10 bg-[length:8px_8px]",
+        "inline-block size-3.5 shrink-0 rounded-[3px] bg-[length:7px_7px] ring-1 ring-black/10",
         className,
       )}
       style={{
@@ -43,7 +45,7 @@ export function ColorSwatch({
           : color
             ? undefined
             : "linear-gradient(45deg, #d4d4d8 25%, transparent 25%, transparent 75%, #d4d4d8 75%), linear-gradient(45deg, #d4d4d8 25%, white 25%, white 75%, #d4d4d8 75%)",
-        backgroundPosition: color || preview ? undefined : "0 0, 4px 4px",
+        backgroundPosition: color || preview ? undefined : "0 0, 3px 3px",
       }}
     />
   );
@@ -58,40 +60,43 @@ export function ColorPickerBody({
   onChange: (value: string) => void;
   swatches?: string[];
 }) {
-  const hex = normalize(color) || "#ffffff";
-  const alpha = parseAlpha(color);
+  const parsed = parseCssColor(color);
+  const hex = parsed?.hex || normalize(color) || "#ffffff";
+  const alpha = parsed && color ? parsed.alpha : readAlpha(color);
+
   return (
-    <div className="grid gap-2.5">
-      <HexColorPicker className="color-picker !w-full" color={hex} onChange={(next) => onChange(alpha < 1 ? hexToRgba(next, alpha) : next)} />
+    <div className="grid gap-2">
+      <HexColorPicker className="color-picker !w-full" color={hex} onChange={(next) => onChange(paintValue(next, alpha))} />
       <div className="flex items-center gap-1.5">
-        <ColorSwatch color={hex} className="size-6 rounded" />
+        <ColorSwatch color={paintValue(hex, alpha)} className="size-5" />
         <HexColorInput
           prefixed
           color={hex}
-          onChange={(next) => onChange(alpha < 1 ? hexToRgba(next, alpha) : next)}
-          className="h-7 min-w-0 flex-1 rounded border border-zinc-200 bg-zinc-50 px-2 font-mono text-[11px] uppercase"
+          onChange={(next) => onChange(paintValue(next, alpha))}
+          className="h-6 min-w-0 flex-1 rounded border-0 bg-zinc-100 px-2 font-mono text-[11px] uppercase"
         />
+        <span className="w-8 text-right font-mono text-[11px] text-zinc-500">{Math.round(alpha * 100)}</span>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-8 text-[10px] uppercase tracking-wide text-zinc-400">Alpha</span>
         <Slider
+          className="h-5"
           min={0}
           max={100}
           step={1}
-          value={[Math.round(alpha * 100)]}
-          onValueChange={([next]) => onChange(hexToRgba(hex, next / 100))}
+          value={[Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)]}
+          onValueChange={([next]) => onChange(paintValue(hex, (next ?? 0) / 100))}
         />
-        <span className="w-8 text-right font-mono text-[11px] text-zinc-500">{Math.round(alpha * 100)}</span>
       </div>
       {swatches?.length ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1">
           {[...new Set(swatches)].map((swatch) => (
             <button
               key={swatch}
               type="button"
               title={swatch}
-              className="size-5 rounded-sm border border-black/10"
-              style={{ background: swatch }}
+              className="size-4 rounded-[3px] ring-1 ring-black/10"
+              style={{ backgroundColor: swatch }}
               onClick={() => onChange(swatch)}
             />
           ))}
@@ -119,9 +124,11 @@ export function ColorField({
   const stored = normalize(value);
   const live = stored || normalize(resolved);
   const inherited = !stored && Boolean(live);
+  const alpha = readAlpha(value || resolved);
+  const shown = live ? (alpha < 0.995 ? `${live} ${Math.round(alpha * 100)}%` : live) : "None";
 
   return (
-    <div className={cn("grid gap-1.5", compact && "gap-0")}>
+    <div className={cn("grid gap-1", compact && "gap-0")}>
       {compact ? null : (
         <div className="flex items-center justify-between">
           <Label className="text-[11px] text-zinc-500">{label}</Label>
@@ -132,15 +139,13 @@ export function ColorField({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-7 w-full items-center gap-2 rounded border border-zinc-200 bg-white px-1.5 text-left text-sm hover:border-zinc-300"
+            className="flex h-6 w-full items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70"
           >
-            <ColorSwatch color={live} />
-            <span className={cn("flex-1 font-mono text-[11px]", inherited && "text-zinc-400")}>
-              {live || "None"}
-            </span>
+            <ColorSwatch color={value || live} />
+            <span className={cn("flex-1 font-mono text-[11px]", inherited && "text-zinc-400")}>{shown}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[248px] rounded-lg border-zinc-200 p-3 shadow-xl">
+        <PopoverContent className="w-[240px] rounded-lg border-zinc-200 p-3 shadow-xl">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-medium text-zinc-700">{label}</p>
             {stored ? (
@@ -168,7 +173,7 @@ export function OpacitySlider({
   return (
     <div className="flex items-center gap-2">
       <Slider min={0} max={100} step={1} value={[current]} onValueChange={([next]) => onChange(String(next / 100))} />
-      <span className="w-10 text-right font-mono text-[11px] text-zinc-500">{current}%</span>
+      <span className="w-8 text-right font-mono text-[11px] text-zinc-500">{current}%</span>
     </div>
   );
 }

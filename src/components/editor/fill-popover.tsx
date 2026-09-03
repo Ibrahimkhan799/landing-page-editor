@@ -5,7 +5,7 @@ import { ColorPickerBody, ColorSwatch } from "@/components/editor/color-field";
 import { GradientField } from "@/components/editor/gradient-field";
 import { MediaPicker } from "@/components/editor/media-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { rgbToHex } from "@/lib/computed-styles";
+import { parseCssColor, rgbToHex } from "@/lib/computed-styles";
 import type { StyleProps } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,10 @@ export function FillPopover({
   swatches?: string[];
 }) {
   const stored = styles.background || "";
-  const hex = rgbToHex(stored || computed.background || "") || stored;
+  const raw = stored || computed.background || "";
+  const parsed = parseCssColor(raw);
+  const hex = parsed?.hex || rgbToHex(raw) || stored;
+  const alpha = parsed?.alpha ?? 1;
   const inherited = !styles.background && !styles.backgroundImage;
   const detected = detectMode(styles, computed);
   const [mode, setMode] = useState<FillMode | null>(null);
@@ -54,7 +57,7 @@ export function FillPopover({
   }, [styles.backgroundImage]);
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1">
       <div className="flex items-center justify-between">
         <p className="text-[11px] text-zinc-500">Fill</p>
         {inherited ? <span className="text-[10px] uppercase tracking-wide text-zinc-400">Computed</span> : null}
@@ -63,7 +66,7 @@ export function FillPopover({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-7 items-center gap-2 rounded border border-zinc-200 bg-white px-1.5 text-left hover:border-zinc-300"
+            className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70"
           >
             <ColorSwatch
               color={detected === "solid" ? hex : ""}
@@ -78,10 +81,11 @@ export function FillPopover({
             />
             <span className="flex-1 truncate font-mono text-[11px] text-zinc-700">
               {fillLabel(detected, hex)}
+              {detected === "solid" && hex && alpha < 0.995 ? ` ${Math.round(alpha * 100)}%` : ""}
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[248px] rounded-lg border-zinc-200 p-0 shadow-xl">
+        <PopoverContent className="w-[248px] rounded-lg border-zinc-200 p-0 shadow-xl">
           <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
             <p className="text-[11px] font-medium text-zinc-700">Fill</p>
             <button
@@ -110,7 +114,7 @@ export function FillPopover({
           <div className="p-3">
             {currentMode === "solid" ? (
               <ColorPickerBody
-                color={hex || "#ffffff"}
+                color={raw || "#ffffff"}
                 onChange={(background) => onChange({ background, backgroundImage: "" })}
                 swatches={swatches}
               />
@@ -123,6 +127,7 @@ export function FillPopover({
                     : "linear-gradient(135deg, #0f766e, #f59e0b)"
                 }
                 onChange={(backgroundImage) => onChange({ backgroundImage, background: "" })}
+                swatches={swatches}
               />
             ) : null}
             {currentMode === "image" ? (
