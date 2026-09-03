@@ -11,7 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cloneSection, createElement, createSection } from "@/lib/defaults";
+import { cloneElementNode, cloneSection, createElement, createSection } from "@/lib/defaults";
 import { migratePage } from "@/lib/migrate";
 import { defaultElementsSlot, findElement, slotDefs } from "@/lib/slots";
 import type {
@@ -64,7 +64,15 @@ type EditorContextValue = {
   updateSlot: (sectionId: string, slotId: string, value: SlotValue) => void;
   addElement: (sectionId: string, type: ElementType, slotId?: string) => void;
   removeElement: (sectionId: string, elementId: string) => void;
+  duplicateElement: (sectionId: string, elementId: string) => void;
   moveElement: (sectionId: string, slotId: string, from: number, to: number) => void;
+  relocateElement: (
+    fromSectionId: string,
+    fromSlotId: string,
+    elementId: string,
+    toSectionId: string,
+    toSlotId: string,
+  ) => void;
   updateElement: (sectionId: string, elementId: string, patch: Partial<PageElement>) => void;
   updateElementProp: (sectionId: string, elementId: string, key: string, value: unknown) => void;
   updateElementMeta: (sectionId: string, elementId: string, patch: NodeMeta) => void;
@@ -251,6 +259,74 @@ export function EditorProvider({
     [mutate],
   );
 
+  const duplicateElement = useCallback(
+    (sectionId: string, elementId: string) => {
+      let copyId = "";
+      let slotId = "extra";
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => {
+          const found = findElement(section, elementId);
+          if (!found) return section;
+          const copy = cloneElementNode(found.element);
+          copyId = copy.id;
+          slotId = found.slotId;
+          const def = slotDefs(section.type).find((slot) => slot.id === found.slotId);
+          const slots = { ...section.slots };
+          if (def?.kind === "element") {
+            slots[found.slotId] = copy;
+          } else {
+            const list = Array.isArray(slots[found.slotId]) ? [...(slots[found.slotId] as PageElement[])] : [];
+            const index = list.findIndex((element) => element.id === elementId);
+            list.splice(index + 1, 0, copy);
+            slots[found.slotId] = list;
+          }
+          return { ...section, slots };
+        }),
+      );
+      if (copyId) setSelection({ kind: "element", sectionId, slotId, elementId: copyId });
+    },
+    [mutate],
+  );
+
+  const relocateElement = useCallback(
+    (fromSectionId: string, fromSlotId: string, elementId: string, toSectionId: string, toSlotId: string) => {
+      mutate((current) => {
+        let moving: PageElement | null = null;
+        const stripped = current.sections.map((section) => {
+          if (section.id !== fromSectionId) return section;
+          const slots = { ...section.slots };
+          const value = slots[fromSlotId];
+          if (Array.isArray(value)) {
+            moving = value.find((element) => element.id === elementId) ?? null;
+            slots[fromSlotId] = value.filter((element) => element.id !== elementId);
+          } else if (value && typeof value === "object" && "id" in value && value.id === elementId) {
+            moving = value as PageElement;
+            slots[fromSlotId] = null;
+          }
+          return { ...section, slots };
+        });
+        if (!moving) return current;
+        return {
+          ...current,
+          sections: stripped.map((section) => {
+            if (section.id !== toSectionId) return section;
+            const def = slotDefs(section.type).find((slot) => slot.id === toSlotId);
+            const slots = { ...section.slots };
+            if (def?.kind === "element") slots[toSlotId] = moving;
+            else {
+              const list = Array.isArray(slots[toSlotId]) ? [...(slots[toSlotId] as PageElement[])] : [];
+              list.push(moving as PageElement);
+              slots[toSlotId] = list;
+            }
+            return { ...section, slots };
+          }),
+        };
+      });
+      setSelection({ kind: "element", sectionId: toSectionId, slotId: toSlotId, elementId });
+    },
+    [mutate],
+  );
+
   const moveElement = useCallback(
     (sectionId: string, slotId: string, from: number, to: number) => {
       mutate((current) =>
@@ -349,7 +425,9 @@ export function EditorProvider({
       updateSlot,
       addElement,
       removeElement,
+      duplicateElement,
       moveElement,
+      relocateElement,
       updateElement,
       updateElementProp,
       updateElementMeta,
@@ -375,7 +453,9 @@ export function EditorProvider({
       updateSlot,
       addElement,
       removeElement,
+      duplicateElement,
       moveElement,
+      relocateElement,
       updateElement,
       updateElementProp,
       updateElementMeta,

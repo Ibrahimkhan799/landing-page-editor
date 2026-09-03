@@ -15,6 +15,9 @@ export function boxToCss(box?: Partial<BoxEdges>, prefix: "padding" | "margin" =
 
 export function styleToCss(styles?: StyleProps): CSSProperties {
   if (!styles) return {};
+  const rotate = styles.rotate ? `rotate(${styles.rotate})` : "";
+  const scale = styles.scale ? `scale(${styles.scale})` : "";
+  const transform = [rotate, scale].filter(Boolean).join(" ") || undefined;
   return {
     display: styles.display || undefined,
     flexDirection: styles.flexDirection as CSSProperties["flexDirection"],
@@ -22,16 +25,22 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
     alignItems: styles.alignItems,
     gap: styles.gap || undefined,
     width: styles.width || undefined,
+    minWidth: styles.minWidth || undefined,
     maxWidth: styles.maxWidth || undefined,
     height: styles.height || undefined,
+    minHeight: styles.minHeight || undefined,
+    maxHeight: styles.maxHeight || undefined,
     color: styles.color || undefined,
     background: styles.background || undefined,
     backgroundImage: styles.backgroundImage || undefined,
     fontSize: styles.fontSize || undefined,
     fontWeight: styles.fontWeight || undefined,
+    fontStyle: styles.fontStyle as CSSProperties["fontStyle"],
     lineHeight: styles.lineHeight || undefined,
     letterSpacing: styles.letterSpacing || undefined,
     textAlign: styles.textAlign as CSSProperties["textAlign"],
+    textDecoration: styles.textDecoration || undefined,
+    textTransform: styles.textTransform as CSSProperties["textTransform"],
     borderWidth: styles.borderWidth || undefined,
     borderStyle: styles.borderStyle || undefined,
     borderColor: styles.borderColor || undefined,
@@ -39,6 +48,16 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
     boxShadow: styles.boxShadow || undefined,
     opacity: styles.opacity || undefined,
     overflow: styles.overflow || undefined,
+    position: styles.position as CSSProperties["position"],
+    top: styles.top || undefined,
+    right: styles.right || undefined,
+    bottom: styles.bottom || undefined,
+    left: styles.left || undefined,
+    zIndex: styles.zIndex || undefined,
+    transform,
+    filter: styles.filterBlur ? `blur(${styles.filterBlur})` : undefined,
+    backdropFilter: styles.backdropBlur ? `blur(${styles.backdropBlur})` : undefined,
+    cursor: styles.cursor || undefined,
     ...boxToCss(styles.padding, "padding"),
     ...boxToCss(styles.margin, "margin"),
   };

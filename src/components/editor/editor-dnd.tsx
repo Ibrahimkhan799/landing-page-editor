@@ -28,7 +28,7 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 
 export function EditorDnd({ children }: { children: ReactNode }) {
-  const { page, addSection, addElement, moveSection, moveElement } = useEditor();
+  const { page, addSection, addElement, moveSection, moveElement, relocateElement } = useEditor();
   const [overlay, setOverlay] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -43,6 +43,14 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     }
     if (data?.kind === "library-section") {
       setOverlay(`Section · ${data.type}`);
+      return;
+    }
+    if (data?.kind === "section") {
+      setOverlay("Move section");
+      return;
+    }
+    if (data?.kind === "element") {
+      setOverlay("Move element");
       return;
     }
     setOverlay(null);
@@ -85,6 +93,17 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     }
 
     if (activeData?.kind === "element" && activeData.sectionId && activeData.slotId) {
+      const overSlotId = overData?.slotId;
+      const overSectionId = overData?.sectionId;
+      if (
+        overSectionId &&
+        overSlotId &&
+        (overSectionId !== activeData.sectionId || overSlotId !== activeData.slotId) &&
+        (overData?.kind === "slot" || overData?.kind === "element")
+      ) {
+        relocateElement(activeData.sectionId, activeData.slotId, String(active.id), overSectionId, overSlotId);
+        return;
+      }
       const section = page.sections.find((item) => item.id === activeData.sectionId);
       if (!section) return;
       const def = slotDefs(section.type).find((slot) => slot.id === activeData.slotId);

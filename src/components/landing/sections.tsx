@@ -54,6 +54,7 @@ function SectionShell({
 }) {
   return (
     <section
+      data-editor-node={node?.id}
       id={node?.htmlId || id}
       className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
       style={{ background: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...styleToCss(node?.styles) }}
@@ -102,6 +103,7 @@ export function LandingSection({
       const cta = node("cta");
       return (
         <header
+          data-editor-node={section.id}
           id={section.htmlId || undefined}
           className={cn("border-b px-6", bool(p.sticky, true) && "sticky top-0 z-20 backdrop-blur", section.className)}
           style={{
@@ -484,6 +486,7 @@ export function LandingSection({
     case "footer":
       return (
         <footer
+          data-editor-node={section.id}
           id={section.htmlId || undefined}
           className={cn("border-t px-6 py-10", section.className)}
           style={{ borderColor: "var(--lp-border)", background: "var(--lp-bg)", ...styleToCss(section.styles) }}
