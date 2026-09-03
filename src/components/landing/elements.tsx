@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { styleToCss } from "@/lib/styles";
+import { useNodeCss, usePreviewStateAttr } from "@/components/landing/style-preview";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
 
@@ -48,11 +48,14 @@ export function LandingElement({
   const align = asString(p.align, "left");
   const alignClass =
     align === "center" ? "text-center mx-auto" : align === "right" ? "text-right ml-auto" : "";
+  const nodeCss = useNodeCss(element);
+  const previewState = usePreviewStateAttr(element);
   const meta = {
     id: element.htmlId || undefined,
     className: element.className || undefined,
-    style: styleToCss(element.styles),
+    style: nodeCss,
     "data-editor-node": element.id,
+    "data-preview-state": previewState,
   };
 
   switch (element.type) {
@@ -63,7 +66,7 @@ export function LandingElement({
         <Tag
           {...meta}
           className={cn(headingSizes[Tag], alignClass, element.className)}
-          style={{ fontFamily: "var(--lp-font-heading)", ...styleToCss(element.styles) }}
+          style={{ fontFamily: "var(--lp-font-heading)", ...nodeCss }}
         >
           {asString(p.text, "Heading")}
         </Tag>
@@ -74,7 +77,7 @@ export function LandingElement({
         <p
           {...meta}
           className={cn("max-w-2xl text-base leading-7", alignClass, element.className)}
-          style={{ color: "var(--lp-muted-fg)", ...styleToCss(element.styles) }}
+          style={{ color: "var(--lp-muted-fg)", ...nodeCss }}
         >
           {asString(p.text, "")}
         </p>
@@ -82,10 +85,13 @@ export function LandingElement({
     case "button": {
       const variant = asString(p.variant, "primary");
       const size = asString(p.size, "md");
+      const disabled = asBool(p.disabled);
+      const href = asString(p.href, "#");
       const className = cn(
-        "font-medium",
+        "font-medium transition-colors",
         size === "sm" && "h-8 px-3 text-xs",
         size === "lg" && "h-12 px-6 text-base",
+        disabled && "pointer-events-none opacity-50",
         element.className,
       );
       const style = {
@@ -99,30 +105,28 @@ export function LandingElement({
                 border: "1px solid var(--lp-border)",
                 borderRadius: "var(--lp-radius)",
               }),
-        ...styleToCss(element.styles),
+        ...nodeCss,
       };
-      if (!interactive) {
-        return (
-          <span id={element.htmlId || undefined} data-editor-node={element.id} className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
-            {asString(p.label, "Button")}
-          </span>
-        );
+      const shared = {
+        id: element.htmlId || undefined,
+        "data-editor-node": element.id,
+        "data-preview-state": previewState,
+        className: cn(className, "inline-flex items-center justify-center px-4 py-2"),
+        style,
+        "aria-disabled": disabled || undefined,
+      };
+      if (!interactive || disabled) {
+        return <span {...shared}>{asString(p.label, "Button")}</span>;
       }
       return (
-        <a
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          href={asString(p.href, "#")}
-          className={cn(className, "inline-flex items-center justify-center px-4 py-2")}
-          style={style}
-        >
+        <a {...shared} href={href}>
           {asString(p.label, "Button")}
         </a>
       );
     }
     case "input":
       return (
-        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} data-preview-state={previewState} style={nodeCss}>
           <Label>{asString(p.label, "Label")}</Label>
           <Input
             id={element.htmlId || undefined}
@@ -139,7 +143,7 @@ export function LandingElement({
       );
     case "textarea":
       return (
-        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} data-preview-state={previewState} style={nodeCss}>
           <Label>{asString(p.label, "Message")}</Label>
           <Textarea
             id={element.htmlId || undefined}
@@ -159,7 +163,7 @@ export function LandingElement({
         .map((line) => line.trim())
         .filter(Boolean);
       return (
-        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} data-preview-state={previewState} style={nodeCss}>
           <Label>{asString(p.label, "Select")}</Label>
           <Select disabled={!interactive}>
             <SelectTrigger id={element.htmlId || undefined} className={element.className} style={{ borderRadius: "var(--lp-radius)" }}>
@@ -178,7 +182,7 @@ export function LandingElement({
     }
     case "checkbox":
       return (
-        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} data-editor-node={element.id} style={styleToCss(element.styles)}>
+        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} data-editor-node={element.id} data-preview-state={previewState} style={nodeCss}>
           <Checkbox disabled={!interactive} defaultChecked={asBool(p.checked)} />
           {asString(p.label, "Checkbox")}
         </label>
@@ -189,6 +193,7 @@ export function LandingElement({
         <Badge
           id={element.htmlId || undefined}
           data-editor-node={element.id}
+          data-preview-state={previewState}
           className={element.className}
           style={{
             ...(variant === "primary"
@@ -196,7 +201,7 @@ export function LandingElement({
               : variant === "accent"
                 ? { backgroundColor: "var(--lp-accent)", color: "var(--lp-accent-fg)", borderColor: "transparent" }
                 : { backgroundColor: "var(--lp-muted)", color: "var(--lp-fg)" }),
-            ...styleToCss(element.styles),
+            ...nodeCss,
           }}
         >
           {asString(p.text, "Badge")}
@@ -209,10 +214,11 @@ export function LandingElement({
         <img
           id={element.htmlId || undefined}
           data-editor-node={element.id}
+          data-preview-state={previewState}
           src={asString(p.src)}
           alt={asString(p.alt, "")}
           className={cn("w-full object-cover", asBool(p.rounded, true) && "rounded-[var(--lp-radius)]", element.className)}
-          style={styleToCss(element.styles)}
+          style={nodeCss}
         />
       );
     case "video":
@@ -220,23 +226,25 @@ export function LandingElement({
         <video
           id={element.htmlId || undefined}
           data-editor-node={element.id}
+          data-preview-state={previewState}
           src={asString(p.src)}
           className={cn("w-full rounded-[var(--lp-radius)]", element.className)}
-          style={styleToCss(element.styles)}
+          style={nodeCss}
           controls={interactive}
           muted
           playsInline
         />
       );
     case "separator":
-      return <Separator id={element.htmlId || undefined} data-editor-node={element.id} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} style={styleToCss(element.styles)} />;
+      return <Separator id={element.htmlId || undefined} data-editor-node={element.id} data-preview-state={previewState} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} style={nodeCss} />;
     case "card":
       return (
         <Card
           id={element.htmlId || undefined}
           data-editor-node={element.id}
+          data-preview-state={previewState}
           className={cn("max-w-sm", element.className)}
-          style={{ borderRadius: "var(--lp-radius)", background: "var(--lp-card)", ...styleToCss(element.styles) }}
+          style={{ borderRadius: "var(--lp-radius)", background: "var(--lp-card)", ...nodeCss }}
         >
           <CardHeader>
             <CardTitle style={{ fontFamily: "var(--lp-font-heading)" }}>{asString(p.title)}</CardTitle>

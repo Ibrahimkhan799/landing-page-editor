@@ -1,7 +1,9 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { LandingElement } from "@/components/landing/elements";
+import { useNodeCss } from "@/components/landing/style-preview";
 import { elementSlot, elementsSlot, textSlot } from "@/lib/slots";
-import { styleToCss } from "@/lib/styles";
 import type { PageSection, ThemeConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -52,12 +54,13 @@ function SectionShell({
   id?: string;
   node?: PageSection;
 }) {
+  const nodeCss = useNodeCss(node);
   return (
     <section
       data-editor-node={node?.id}
       id={node?.htmlId || id}
       className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
-      style={{ background: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...styleToCss(node?.styles) }}
+      style={{ background: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...nodeCss }}
     >
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </section>
@@ -78,6 +81,7 @@ export function LandingSection({
   renderEmptySlot?: (slotId: string) => ReactNode;
 }) {
   const p = section.props;
+  const sectionCss = useNodeCss(section);
   const t = (id: string, fallback = "") => textSlot(section, id, str(p[id], fallback));
   const extras = (id: string) => elementsSlot(section, id);
   const node = (id: string) => elementSlot(section, id);
@@ -109,7 +113,7 @@ export function LandingSection({
           style={{
             background: "color-mix(in srgb, var(--lp-bg) 88%, transparent)",
             borderColor: "var(--lp-border)",
-            ...styleToCss(section.styles),
+            ...sectionCss,
           }}
         >
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6">
@@ -489,7 +493,7 @@ export function LandingSection({
           data-editor-node={section.id}
           id={section.htmlId || undefined}
           className={cn("border-t px-6 py-10", section.className)}
-          style={{ borderColor: "var(--lp-border)", background: "var(--lp-bg)", ...styleToCss(section.styles) }}
+          style={{ borderColor: "var(--lp-border)", background: "var(--lp-bg)", ...sectionCss }}
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>

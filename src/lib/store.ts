@@ -86,6 +86,11 @@ export async function listComponents(): Promise<SavedComponent[]> {
   return JSON.parse(raw) as SavedComponent[];
 }
 
+export async function getComponent(id: string): Promise<SavedComponent | null> {
+  const all = await listComponents();
+  return all.find((item) => item.id === id) ?? null;
+}
+
 export async function saveComponent(component: SavedComponent) {
   const all = await listComponents();
   const next = [component, ...all.filter((item) => item.id !== component.id)];
