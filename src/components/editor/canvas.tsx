@@ -19,6 +19,7 @@ import { useEditor } from "@/components/editor/editor-context";
 import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
+import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
 import { elementsSlot, slotDefs } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -52,17 +53,32 @@ function Overlay({
     data: { kind, ...data },
   });
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [box, setBox] = useState({ top: 0, left: 0, width: 0, height: 0, radius: "0px" });
 
   useEffect(() => {
-    const node = boxRef.current;
-    if (!node) return;
-    const update = () => setSize({ width: Math.round(node.offsetWidth), height: Math.round(node.offsetHeight) });
+    const root = boxRef.current;
+    if (!root) return;
+    const update = () => {
+      const paint = (root.querySelector("[data-editor-node]") as HTMLElement | null) ?? root;
+      const rootRect = root.getBoundingClientRect();
+      const paintRect = paint.getBoundingClientRect();
+      setBox({
+        top: paintRect.top - rootRect.top,
+        left: paintRect.left - rootRect.left,
+        width: paintRect.width,
+        height: paintRect.height,
+        radius: getComputedStyle(paint).borderTopLeftRadius,
+      });
+    };
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(node);
+    observer.observe(root);
+    const paint = root.querySelector("[data-editor-node]");
+    if (paint) observer.observe(paint);
     return () => observer.disconnect();
   }, [selected, id]);
+
+  const chrome = selected || !inactive;
 
   return (
     <div
@@ -78,68 +94,79 @@ function Overlay({
       }}
     >
       <div
+        data-editor-chrome
         className={cn(
-          "pointer-events-none absolute inset-0 z-10 rounded-[2px] border transition-colors",
+          "pointer-events-none absolute z-10",
           selected
-            ? "border-[1.5px] border-[#0d99ff]"
+            ? "shadow-[0_0_0_1px_#0d99ff]"
             : inactive
-              ? "border border-transparent"
-              : "border border-transparent group-hover/overlay:border-[#0d99ff]/70",
+              ? "shadow-none"
+              : "shadow-none group-hover/overlay:shadow-[0_0_0_1px_rgba(13,153,255,0.55)]",
         )}
+        style={{
+          top: box.top,
+          left: box.left,
+          width: box.width,
+          height: box.height,
+          borderRadius: box.radius,
+        }}
       />
       <div
+        data-editor-chrome
         className={cn(
-          "absolute left-1.5 top-1.5 z-20 flex items-center gap-1 rounded-[2px] bg-[#0d99ff] px-1.5 py-0.5 text-[10px] font-medium text-white",
-          selected ? "opacity-100" : inactive ? "opacity-0" : "pointer-events-none opacity-0 group-hover/overlay:opacity-100",
+          "absolute z-20 flex h-4 items-center gap-0.5",
+          selected ? "opacity-100" : chrome ? "opacity-0 group-hover/overlay:opacity-100" : "opacity-0",
         )}
+        style={{ top: Math.max(0, box.top) - 18, left: box.left }}
       >
-        {label}
-      </div>
-      <div
-        className={cn(
-          "absolute right-1.5 top-1.5 z-20 flex items-center gap-0.5 rounded-[4px] border border-zinc-200 bg-white p-0.5 shadow-sm",
-          selected ? "opacity-100" : inactive ? "opacity-0" : "opacity-0 group-hover/overlay:opacity-100",
-        )}
-      >
-        <button
-          type="button"
-          className="grid h-6 w-6 cursor-grab place-items-center text-zinc-400 active:cursor-grabbing"
-          title="Drag"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-3.5" />
-        </button>
-        {onDuplicate ? (
-          <button
-            type="button"
-            className="grid h-6 w-6 place-items-center text-zinc-400 hover:text-zinc-800"
-            title="Duplicate"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDuplicate();
-            }}
-          >
-            <Copy className="size-3.5" />
-          </button>
-        ) : null}
-        {onRemove ? (
-          <button
-            type="button"
-            className="grid h-6 w-6 place-items-center text-zinc-400 hover:text-red-600"
-            title="Delete"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
+        <span className="rounded-sm bg-[#0d99ff] px-1 text-[9px] font-medium leading-4 text-white">{label}</span>
+        {chrome ? (
+          <div className="ml-0.5 flex items-center rounded-sm bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
+            <button
+              type="button"
+              className="grid size-4 cursor-grab place-items-center text-zinc-400 active:cursor-grabbing"
+              title="Drag"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-3" />
+            </button>
+            {onDuplicate ? (
+              <button
+                type="button"
+                className="grid size-4 place-items-center text-zinc-400 hover:text-zinc-800"
+                title="Duplicate"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDuplicate();
+                }}
+              >
+                <Copy className="size-3" />
+              </button>
+            ) : null}
+            {onRemove ? (
+              <button
+                type="button"
+                className="grid size-4 place-items-center text-zinc-400 hover:text-red-600"
+                title="Delete"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove();
+                }}
+              >
+                <Trash2 className="size-3" />
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {selected ? (
-        <div className="pointer-events-none absolute bottom-1.5 right-1.5 z-20 rounded-[2px] bg-zinc-900/80 px-1.5 py-0.5 font-mono text-[10px] text-white">
-          {size.width} × {size.height}
+        <div
+          data-editor-chrome
+          className="pointer-events-none absolute z-20 font-mono text-[9px] text-zinc-500"
+          style={{ top: box.top + box.height + 3, left: box.left + box.width, transform: "translateX(-100%)" }}
+        >
+          {Math.round(box.width)} × {Math.round(box.height)}
         </div>
       ) : null}
       {children}
@@ -201,6 +228,7 @@ export function EditorCanvas() {
     selectedElement,
   } = useEditor();
   const width = breakpoint === "mobile" ? 390 : breakpoint === "tablet" ? 768 : 1200;
+  const css = nodeStylesheet(collectStyledNodes(page));
   const selectedLabel =
     selection.kind === "element"
       ? "Element"
@@ -232,6 +260,7 @@ export function EditorCanvas() {
           >
             <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
               <div style={themeStyle(page.theme)}>
+              {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
                 {page.sections.map((section, index) => {
                   const sectionSelected = selection.kind === "section" && selection.sectionId === section.id;
                   const elementIds = slotDefs(section.type)

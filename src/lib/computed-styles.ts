@@ -8,33 +8,36 @@ export function parseCssColor(input: string): { hex: string; alpha: number } | n
       value.length === 4
         ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`.toLowerCase()
         : value.slice(0, 7).toLowerCase();
-    return { hex, alpha: 1 };
+    const alpha =
+      value.length === 9 ? Number.parseInt(value.slice(7, 9), 16) / 255 : value.length === 5 ? Number.parseInt(value[4] + value[4], 16) / 255 : 1;
+    return { hex, alpha: Number.isFinite(alpha) ? alpha : 1 };
   }
   const match = value.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i);
   if (!match) return null;
   const alpha = match[4] === undefined ? 1 : match[4].endsWith("%") ? Number.parseFloat(match[4]) / 100 : Number(match[4]);
-  if (alpha <= 0.01) return { hex: "", alpha: 0 };
   const hex = `#${[match[1], match[2], match[3]]
     .map((part) => Math.round(Number(part)).toString(16).padStart(2, "0"))
     .join("")}`;
-  return { hex, alpha };
+  return { hex, alpha: Number.isFinite(alpha) ? alpha : 1 };
 }
 
 export function rgbToHex(input: string): string {
   return parseCssColor(input)?.hex ?? "";
 }
 
-function opaqueFill(el: HTMLElement): string {
-  const nodes = [el, ...Array.from(el.querySelectorAll("*"))] as HTMLElement[];
-  for (const node of nodes) {
-    const parsed = parseCssColor(getComputedStyle(node).backgroundColor);
-    if (parsed?.hex) return parsed.hex;
-  }
+function ownPaintedColor(el: HTMLElement, property: "backgroundColor" | "color"): string {
+  if (el.closest("[data-editor-chrome]")) return "";
+  const parsed = parseCssColor(getComputedStyle(el)[property]);
+  if (parsed?.hex) return parsed.hex;
   return "";
 }
 
+function opaqueFill(el: HTMLElement): string {
+  return ownPaintedColor(el, "backgroundColor");
+}
+
 function opaqueColor(el: HTMLElement): string {
-  return parseCssColor(getComputedStyle(el).color)?.hex ?? "";
+  return ownPaintedColor(el, "color");
 }
 
 export function hexToRgba(hex: string, alpha = 1) {

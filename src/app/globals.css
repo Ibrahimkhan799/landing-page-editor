@@ -86,11 +86,23 @@ body {
 
 .color-picker.react-colorful {
   width: 100%;
-  height: 140px;
+  height: 148px;
+  gap: 10px;
 }
 
 .color-picker .react-colorful__saturation {
   border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.editor-ui input:not([type="file"]):not([type="checkbox"]),
+.editor-ui textarea,
+.editor-ui button[role="combobox"] {
+  height: 24px;
+  min-height: 24px;
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 11px;
 }
 
 .color-picker .react-colorful__hue,

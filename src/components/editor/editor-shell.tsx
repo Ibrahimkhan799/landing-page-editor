@@ -113,7 +113,7 @@ export function EditorShell() {
   ]);
 
   return (
-    <div className="flex h-screen flex-col bg-white text-zinc-900">
+    <div className="editor-ui flex h-screen flex-col bg-white text-zinc-900">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2">
         <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600">
           <Link href="/admin">

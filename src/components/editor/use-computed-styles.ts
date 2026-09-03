@@ -19,8 +19,11 @@ export function useComputedStyles(nodeId: string | null, revision: unknown) {
         ...document.querySelectorAll(`[data-editor-node="${CSS.escape(nodeId)}"]`),
       ] as HTMLElement[];
       const el =
-        matches.find((node) => node.matches("span,a,h1,h2,h3,h4,p,img,video,label,button,section,header,footer")) ??
-        matches[0];
+        matches.find(
+          (node) =>
+            !node.closest("[data-editor-chrome]") &&
+            node.matches("span,a,h1,h2,h3,h4,p,img,video,label,button,input,textarea,section,header,footer,div"),
+        ) ?? matches[0];
       if (!el || cancelled) return;
       setSnapshot({
         id: nodeId,

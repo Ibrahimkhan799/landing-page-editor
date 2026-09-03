@@ -105,11 +105,11 @@ function camelToKebab(key: string) {
   return key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
-export function stylePropsToCssText(styles?: StyleProps): string {
+export function stylePropsToCssText(styles?: StyleProps, important = false): string {
   const css = styleToCss(styles);
   return Object.entries(css)
     .filter(([, value]) => value !== undefined && value !== "")
-    .map(([key, value]) => `${camelToKebab(key)}: ${value};`)
+    .map(([key, value]) => `${camelToKebab(key)}: ${value}${important ? " !important" : ""};`)
     .join(" ");
 }
 
@@ -130,9 +130,9 @@ export function nodeStylesheet(nodes: Array<NodeMeta & { id: string }>): string 
     const mobile = stylePropsToCssText(node.responsive?.mobile);
     if (tablet) rules.push(`@media (max-width: 1023px) { ${selector} { ${tablet} } }`);
     if (mobile) rules.push(`@media (max-width: 639px) { ${selector} { ${mobile} } }`);
-    const hover = stylePropsToCssText(node.states?.hover);
-    const focus = stylePropsToCssText(node.states?.focus);
-    const disabled = stylePropsToCssText(node.states?.disabled);
+    const hover = stylePropsToCssText(node.states?.hover, true);
+    const focus = stylePropsToCssText(node.states?.focus, true);
+    const disabled = stylePropsToCssText(node.states?.disabled, true);
     if (hover) rules.push(`${selector}:hover, ${selector}[data-preview-state="hover"] { ${hover} }`);
     if (focus) {
       rules.push(

@@ -101,6 +101,8 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
         body: "Use cards to highlight offers, services, or proof points.",
         footer: "Learn more",
       };
+    case "frame":
+      return { label: "Frame" };
     default:
       return {};
   }
@@ -563,5 +565,6 @@ export const ELEMENT_CATALOG: {
   { type: "image", label: "Image", description: "Photo or illustration" },
   { type: "video", label: "Video", description: "Embedded clip" },
   { type: "card", label: "Card", description: "Title, body, footer" },
+  { type: "frame", label: "Frame", description: "Layout box" },
   { type: "separator", label: "Separator", description: "Horizontal rule" },
 ];

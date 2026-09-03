@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 function elementIcon(type: PageElement["type"]) {
   if (type === "heading" || type === "paragraph") return Type;
+  if (type === "frame") return Frame;
   return Box;
 }
 
