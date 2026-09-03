@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { ElementStack } from "@/components/landing/elements";
+import { LandingElement } from "@/components/landing/elements";
+import { elementSlot, elementsSlot, textSlot } from "@/lib/slots";
+import { styleToCss } from "@/lib/styles";
 import type { PageSection, ThemeConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,17 +44,19 @@ function SectionShell({
   className,
   muted,
   id,
+  node,
 }: {
   children: ReactNode;
   className?: string;
   muted?: boolean;
   id?: string;
+  node?: PageSection;
 }) {
   return (
     <section
-      id={id}
-      className={cn("px-6 py-16 md:px-10 md:py-24", className)}
-      style={{ background: muted ? "var(--lp-muted)" : "var(--lp-bg)" }}
+      id={node?.htmlId || id}
+      className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
+      style={{ background: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...styleToCss(node?.styles) }}
     >
       <div className="mx-auto w-full max-w-6xl">{children}</div>
     </section>
@@ -63,43 +67,57 @@ export function LandingSection({
   section,
   theme,
   interactive = true,
+  renderElement,
+  renderEmptySlot,
 }: {
   section: PageSection;
   theme: ThemeConfig;
   interactive?: boolean;
+  renderElement?: (element: import("@/lib/types").PageElement, slotId: string) => ReactNode;
+  renderEmptySlot?: (slotId: string) => ReactNode;
 }) {
   const p = section.props;
+  const t = (id: string, fallback = "") => textSlot(section, id, str(p[id], fallback));
+  const extras = (id: string) => elementsSlot(section, id);
+  const node = (id: string) => elementSlot(section, id);
+  const renderEl = (element: import("@/lib/types").PageElement, slotId: string) =>
+    renderElement ? renderElement(element, slotId) : <LandingElement element={element} interactive={interactive} />;
+  const empty = (id: string) => renderEmptySlot?.(id) ?? null;
+  const stack = (slotId: string) => {
+    const items = extras(slotId);
+    if (!items.length && !renderEmptySlot) return null;
+    return (
+      <div className="mt-6 flex w-full flex-col items-stretch gap-4">
+        {items.map((element) => (
+          <div key={element.id}>{renderEl(element, slotId)}</div>
+        ))}
+        {empty(slotId)}
+      </div>
+    );
+  };
 
   switch (section.type) {
     case "navbar": {
-      const links = lines(p.links);
+      const links = lines(t("links", str(p.links)));
+      const cta = node("cta");
       return (
         <header
-          className={cn("border-b px-6", bool(p.sticky, true) && "sticky top-0 z-20 backdrop-blur")}
+          id={section.htmlId || undefined}
+          className={cn("border-b px-6", bool(p.sticky, true) && "sticky top-0 z-20 backdrop-blur", section.className)}
           style={{
             background: "color-mix(in srgb, var(--lp-bg) 88%, transparent)",
             borderColor: "var(--lp-border)",
+            ...styleToCss(section.styles),
           }}
         >
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6">
             <BrandMark theme={theme} />
             <nav className="hidden items-center gap-6 text-sm md:flex" style={{ color: "var(--lp-muted-fg)" }}>
               {links.map((link) => (
-                <a key={link} href={`#${link.toLowerCase()}`} className="hover:opacity-80">
-                  {link}
-                </a>
+                <span key={link}>{link}</span>
               ))}
             </nav>
-            <a
-              href={str(p.ctaHref, "#contact")}
-              className="inline-flex h-9 items-center rounded-[var(--lp-radius)] px-4 text-sm font-medium"
-              style={{ background: "var(--lp-primary)", color: "var(--lp-primary-fg)" }}
-            >
-              {str(p.ctaLabel, "Get started")}
-            </a>
-          </div>
-          <div className="mx-auto max-w-6xl pb-4">
-            <ElementStack elements={section.elements} interactive={interactive} />
+            {cta ? renderEl(cta, "cta") : empty("cta")}
           </div>
         </header>
       );
@@ -107,108 +125,80 @@ export function LandingSection({
     case "hero": {
       const align = str(p.align, "center");
       return (
-        <SectionShell id="hero">
+        <SectionShell node={section} id="hero">
           <div className={cn("mx-auto max-w-3xl space-y-6", align === "center" && "text-center")}>
             <p className="text-sm font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--lp-primary)" }}>
-              {str(p.eyebrow)}
+              {t("eyebrow")}
             </p>
             <h1 className="text-4xl font-semibold leading-[1.1] md:text-6xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-              {str(p.headline)}
+              {t("headline")}
             </h1>
             <p className="text-lg leading-8" style={{ color: "var(--lp-muted-fg)" }}>
-              {str(p.subheadline)}
+              {t("subheadline")}
             </p>
             <div className={cn("flex flex-wrap gap-3", align === "center" && "justify-center")}>
-              <a
-                href={str(p.primaryHref, "#contact")}
-                className="inline-flex h-11 items-center rounded-[var(--lp-radius)] px-5 font-medium"
-                style={{ background: "var(--lp-primary)", color: "var(--lp-primary-fg)" }}
-              >
-                {str(p.primaryCta)}
-              </a>
-              {str(p.secondaryCta) ? (
-                <a
-                  href={str(p.secondaryHref, "#")}
-                  className="inline-flex h-11 items-center rounded-[var(--lp-radius)] border px-5 font-medium"
-                  style={{ borderColor: "var(--lp-border)" }}
-                >
-                  {str(p.secondaryCta)}
-                </a>
-              ) : null}
+              {extras("actions").map((element) => (
+                <div key={element.id}>{renderEl(element, "actions")}</div>
+              ))}
+              {empty("actions")}
             </div>
-            <ElementStack elements={section.elements} interactive={interactive} />
+            {stack("extra")}
           </div>
         </SectionShell>
       );
     }
-    case "hero-split":
+    case "hero-split": {
+      const media = node("media");
       return (
-        <SectionShell id="hero">
+        <SectionShell node={section} id="hero">
           <div className="grid items-center gap-10 md:grid-cols-2">
             <div className="space-y-6">
               <p className="text-sm font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--lp-primary)" }}>
-                {str(p.eyebrow)}
+                {t("eyebrow")}
               </p>
               <h1 className="text-4xl font-semibold leading-[1.1] md:text-5xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-                {str(p.headline)}
+                {t("headline")}
               </h1>
               <p className="text-lg leading-8" style={{ color: "var(--lp-muted-fg)" }}>
-                {str(p.subheadline)}
+                {t("subheadline")}
               </p>
               <div className="flex flex-wrap gap-3">
-                <a
-                  href={str(p.primaryHref, "#contact")}
-                  className="inline-flex h-11 items-center rounded-[var(--lp-radius)] px-5 font-medium"
-                  style={{ background: "var(--lp-primary)", color: "var(--lp-primary-fg)" }}
-                >
-                  {str(p.primaryCta)}
-                </a>
-                {str(p.secondaryCta) ? (
-                  <a
-                    href={str(p.secondaryHref, "#")}
-                    className="inline-flex h-11 items-center rounded-[var(--lp-radius)] border px-5 font-medium"
-                    style={{ borderColor: "var(--lp-border)" }}
-                  >
-                    {str(p.secondaryCta)}
-                  </a>
-                ) : null}
+                {extras("actions").map((element) => (
+                  <div key={element.id}>{renderEl(element, "actions")}</div>
+                ))}
+                {empty("actions")}
               </div>
-              <ElementStack elements={section.elements} interactive={interactive} />
+              {stack("extra")}
             </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={str(p.image)}
-              alt=""
-              className="h-full min-h-[320px] w-full object-cover"
-              style={{ borderRadius: "var(--lp-radius)" }}
-            />
+            {media ? renderEl(media, "media") : empty("media")}
           </div>
         </SectionShell>
       );
+    }
     case "logos":
       return (
-        <SectionShell muted id="logos" className="py-12 md:py-14">
+        <SectionShell node={section} muted id="logos" className="py-12 md:py-14">
           <p className="mb-6 text-center text-sm font-medium" style={{ color: "var(--lp-muted-fg)" }}>
-            {str(p.headline)}
+            {t("headline")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-semibold opacity-70">
-            {lines(p.logos).map((logo) => (
+            {lines(t("logos", str(p.logos))).map((logo) => (
               <span key={logo}>{logo}</span>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "features":
     case "services":
       return (
-        <SectionShell id={section.type} muted={section.type === "services"}>
+        <SectionShell node={section} id={section.type} muted={section.type === "services"}>
           <div className="mx-auto mb-12 max-w-2xl text-center">
             <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-              {str(p.headline)}
+              {t("headline")}
             </h2>
             <p className="mt-3" style={{ color: "var(--lp-muted-fg)" }}>
-              {str(p.subheadline)}
+              {t("subheadline")}
             </p>
           </div>
           <div className="grid gap-5 md:grid-cols-3">
@@ -241,38 +231,34 @@ export function LandingSection({
               </div>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
-    case "about":
+    case "about": {
+      const media = node("media");
       return (
-        <SectionShell id="about">
+        <SectionShell node={section} id="about">
           <div className="grid items-center gap-10 md:grid-cols-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={str(p.image)}
-              alt=""
-              className="min-h-[280px] w-full object-cover"
-              style={{ borderRadius: "var(--lp-radius)" }}
-            />
+            {media ? renderEl(media, "media") : empty("media")}
             <div className="space-y-4">
               <p className="text-sm font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--lp-primary)" }}>
-                {str(p.eyebrow)}
+                {t("eyebrow")}
               </p>
               <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-                {str(p.headline)}
+                {t("headline")}
               </h2>
               <p className="text-lg leading-8" style={{ color: "var(--lp-muted-fg)" }}>
-                {str(p.body)}
+                {t("body")}
               </p>
-              <ElementStack elements={section.elements} interactive={interactive} />
+              {stack("extra")}
             </div>
           </div>
         </SectionShell>
       );
+    }
     case "stats":
       return (
-        <SectionShell muted id="stats" className="py-14 md:py-16">
+        <SectionShell node={section} muted id="stats" className="py-14 md:py-16">
           <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
             {list(p.items).map((item) => (
               <div key={item.label} className="text-center">
@@ -285,14 +271,14 @@ export function LandingSection({
               </div>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "testimonials":
       return (
-        <SectionShell id="testimonials">
+        <SectionShell node={section} id="testimonials">
           <h2 className="mb-10 text-center text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-            {str(p.headline)}
+            {t("headline")}
           </h2>
           <div className="grid gap-5 md:grid-cols-3">
             {list(p.items).map((item) => (
@@ -309,18 +295,18 @@ export function LandingSection({
               </blockquote>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "pricing":
       return (
-        <SectionShell id="pricing" muted>
+        <SectionShell node={section} id="pricing" muted>
           <div className="mx-auto mb-12 max-w-2xl text-center">
             <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-              {str(p.headline)}
+              {t("headline")}
             </h2>
             <p className="mt-3" style={{ color: "var(--lp-muted-fg)" }}>
-              {str(p.subheadline)}
+              {t("subheadline")}
             </p>
           </div>
           <div className="grid gap-5 md:grid-cols-3">
@@ -366,14 +352,14 @@ export function LandingSection({
               </div>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "faq":
       return (
-        <SectionShell id="faq">
+        <SectionShell node={section} id="faq">
           <h2 className="mb-8 text-center text-3xl font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
-            {str(p.headline)}
+            {t("headline")}
           </h2>
           <div className="mx-auto max-w-3xl space-y-3">
             {list(p.items).map((item) => (
@@ -389,17 +375,17 @@ export function LandingSection({
               </details>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "gallery":
       return (
-        <SectionShell id="gallery" muted>
+        <SectionShell node={section} id="gallery" muted>
           <h2 className="mb-8 text-center text-3xl font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
-            {str(p.headline)}
+            {t("headline")}
           </h2>
           <div className="grid gap-4 md:grid-cols-3">
-            {lines(p.images).map((src) => (
+            {lines(t("images", str(p.images))).map((src) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={src}
@@ -410,14 +396,14 @@ export function LandingSection({
               />
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
     case "team":
       return (
-        <SectionShell id="team">
+        <SectionShell node={section} id="team">
           <h2 className="mb-10 text-center text-3xl font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
-            {str(p.headline)}
+            {t("headline")}
           </h2>
           <div className="grid gap-6 md:grid-cols-3">
             {list(p.members).map((member) => (
@@ -436,12 +422,13 @@ export function LandingSection({
               </div>
             ))}
           </div>
-          <ElementStack elements={section.elements} interactive={interactive} />
+          {stack("extra")}
         </SectionShell>
       );
-    case "cta":
+    case "cta": {
+      const action = node("action");
       return (
-        <SectionShell id="cta">
+        <SectionShell node={section} id="cta">
           <div
             className="px-8 py-14 text-center"
             style={{
@@ -451,30 +438,24 @@ export function LandingSection({
             }}
           >
             <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-              {str(p.headline)}
+              {t("headline")}
             </h2>
-            <p className="mx-auto mt-3 max-w-2xl opacity-90">{str(p.subheadline)}</p>
-            <a
-              href={str(p.ctaHref, "/admin")}
-              className="mt-6 inline-flex h-11 items-center rounded-[var(--lp-radius)] px-5 font-medium"
-              style={{ background: "var(--lp-accent)", color: "var(--lp-accent-fg)" }}
-            >
-              {str(p.ctaLabel)}
-            </a>
-            <ElementStack elements={section.elements} interactive={interactive} />
+            <p className="mx-auto mt-3 max-w-2xl opacity-90">{t("subheadline")}</p>
+            <div className="mt-6 flex justify-center">{action ? renderEl(action, "action") : empty("action")}</div>
           </div>
         </SectionShell>
       );
+    }
     case "contact":
       return (
-        <SectionShell id="contact" muted>
+        <SectionShell node={section} id="contact" muted>
           <div className="grid gap-10 md:grid-cols-[0.9fr_1.1fr]">
             <div>
               <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
-                {str(p.headline)}
+                {t("headline")}
               </h2>
               <p className="mt-3" style={{ color: "var(--lp-muted-fg)" }}>
-                {str(p.subheadline)}
+                {t("subheadline")}
               </p>
               <dl className="mt-8 space-y-3 text-sm">
                 <div>
@@ -491,52 +472,48 @@ export function LandingSection({
                 </div>
               </dl>
             </div>
-            <form
+            <div
               className="space-y-4 border p-6"
               style={{ background: "var(--lp-card)", borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
-              action="#"
             >
-              <ElementStack elements={section.elements} interactive={interactive} />
-            </form>
+              {stack("form")}
+            </div>
           </div>
         </SectionShell>
       );
     case "footer":
       return (
-        <footer className="border-t px-6 py-10" style={{ borderColor: "var(--lp-border)", background: "var(--lp-bg)" }}>
+        <footer
+          id={section.htmlId || undefined}
+          className={cn("border-t px-6 py-10", section.className)}
+          style={{ borderColor: "var(--lp-border)", background: "var(--lp-bg)", ...styleToCss(section.styles) }}
+        >
           <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
               <BrandMark theme={theme} />
               <p className="mt-2 max-w-sm text-sm" style={{ color: "var(--lp-muted-fg)" }}>
-                {str(p.blurb)}
+                {t("blurb")}
               </p>
             </div>
             <div className="flex gap-4 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
-              {lines(p.links).map((link) => (
-                <a key={link} href="#">
-                  {link}
-                </a>
+              {lines(t("links", str(p.links))).map((link) => (
+                <span key={link}>{link}</span>
               ))}
             </div>
           </div>
           <p className="mx-auto mt-8 max-w-6xl text-xs" style={{ color: "var(--lp-muted-fg)" }}>
-            {str(p.copyright)}
+            {t("copyright")}
           </p>
           <div className="mx-auto max-w-6xl">
-            <ElementStack elements={section.elements} interactive={interactive} />
+            {stack("extra")}
           </div>
         </footer>
       );
     case "custom":
       return (
-        <SectionShell muted={str(p.background, "muted") === "muted"}>
+        <SectionShell node={section} muted={str(p.background, "muted") === "muted"}>
           <div className="space-y-4">
-            {str(p.headline) ? (
-              <h2 className="text-3xl font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
-                {str(p.headline)}
-              </h2>
-            ) : null}
-            <ElementStack elements={section.elements} interactive={interactive} />
+            {stack("body")}
           </div>
         </SectionShell>
       );

@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { createDemoPage } from "@/lib/defaults";
+import { migratePage } from "@/lib/migrate";
 import type { LandingPage, SavedComponent } from "@/lib/types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -32,7 +33,7 @@ export async function listPages(): Promise<LandingPage[]> {
   const pages = await Promise.all(
     jsonFiles.map(async (file) => {
       const raw = await fs.readFile(path.join(PAGES_DIR, file), "utf8");
-      return JSON.parse(raw) as LandingPage;
+      return migratePage(JSON.parse(raw) as LandingPage);
     }),
   );
   if (!pages.some((page) => page.id === "demo-northstar")) {
@@ -47,7 +48,7 @@ export async function getPage(id: string): Promise<LandingPage | null> {
   await ensureDirs();
   try {
     const raw = await fs.readFile(pagePath(id), "utf8");
-    return JSON.parse(raw) as LandingPage;
+    return migratePage(JSON.parse(raw) as LandingPage);
   } catch {
     if (id === "demo-northstar") {
       const demo = createDemoPage();
@@ -65,7 +66,7 @@ export async function getPageBySlug(slug: string): Promise<LandingPage | null> {
 
 export async function savePage(page: LandingPage): Promise<LandingPage> {
   await ensureDirs();
-  const next = { ...page, updatedAt: new Date().toISOString() };
+  const next = { ...migratePage(page), updatedAt: new Date().toISOString() };
   await fs.writeFile(pagePath(page.id), JSON.stringify(next, null, 2) + "\n", "utf8");
   return next;
 }

@@ -1,64 +1,75 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
+import { EmptySlot } from "@/components/editor/empty-slot";
+import { useEditor } from "@/components/editor/editor-context";
+import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
+import { elementsSlot, slotDefs } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { useEditor } from "@/components/editor/editor-context";
+import type { PageElement, SlotDefinition } from "@/lib/types";
 
-function SortableRow({
+function Overlay({
   id,
   kind,
   selected,
+  label,
   onSelect,
+  data,
   children,
-  handleClassName,
 }: {
   id: string;
   kind: "section" | "element";
   selected: boolean;
+  label: string;
   onSelect: () => void;
+  data: Record<string, unknown>;
   children: ReactNode;
-  handleClassName?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    data: { kind },
+    data: { kind, ...data },
   });
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group relative", isDragging && "z-10 opacity-70", selected && "ring-2 ring-primary ring-offset-2")}
+      className={cn("group relative", isDragging && "z-20 opacity-70")}
       onClick={(event) => {
         event.stopPropagation();
         onSelect();
       }}
     >
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 z-10 rounded-md border-2 border-transparent",
+          selected
+            ? kind === "section"
+              ? "border-teal-600"
+              : "border-amber-500"
+            : kind === "section"
+              ? "group-hover:border-teal-400/70"
+              : "group-hover:border-amber-400/70",
+        )}
+      />
+      {selected ? (
+        <div
+          className={cn(
+            "absolute left-2 top-2 z-20 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white",
+            kind === "section" ? "bg-teal-700" : "bg-amber-500",
+          )}
+        >
+          {label}
+        </div>
+      ) : null}
       <button
         type="button"
-        className={cn(
-          "absolute z-10 grid place-items-center rounded-md border bg-background/95 text-muted-foreground shadow-sm",
-          handleClassName,
-        )}
+        className="absolute right-2 top-2 z-20 grid h-7 w-7 place-items-center rounded-md border bg-white/95 text-muted-foreground opacity-0 shadow-sm group-hover:opacity-100"
         {...attributes}
         {...listeners}
       >
@@ -70,111 +81,70 @@ function SortableRow({
 }
 
 export function EditorCanvas({ device }: { device: "desktop" | "tablet" | "mobile" }) {
-  const { page, selection, setSelection, moveSection, moveElement } = useEditor();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  function onDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const kind = active.data.current?.kind;
-    if (kind === "section") {
-      const from = page.sections.findIndex((section) => section.id === active.id);
-      const to = page.sections.findIndex((section) => section.id === over.id);
-      if (from >= 0 && to >= 0) moveSection(from, to);
-      return;
-    }
-    if (kind === "element") {
-      const section = page.sections.find((item) =>
-        item.elements.some((element) => element.id === active.id),
-      );
-      if (!section) return;
-      const from = section.elements.findIndex((element) => element.id === active.id);
-      const to = section.elements.findIndex((element) => element.id === over.id);
-      if (from >= 0 && to >= 0) moveElement(section.id, from, to);
-    }
-  }
-
+  const { page, selection, setSelection } = useEditor();
   const width =
     device === "mobile" ? "max-w-[390px]" : device === "tablet" ? "max-w-[768px]" : "max-w-[1200px]";
 
   return (
-    <div
-      className="min-h-0 flex-1 overflow-auto bg-zinc-200/80 p-6"
-      onClick={() => setSelection({ kind: "page" })}
-    >
+    <div className="min-h-0 flex-1 overflow-auto bg-zinc-200/80 p-6" onClick={() => setSelection({ kind: "page" })}>
       <div className={cn("mx-auto overflow-hidden rounded-xl border bg-white shadow-xl", width)}>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
-            <div style={themeStyle(page.theme)}>
-              {page.sections.map((section) => {
-                const sectionSelected =
-                  selection.kind === "section" && selection.sectionId === section.id;
-                return (
-                  <SortableRow
-                    key={section.id}
-                    id={section.id}
-                    kind="section"
-                    selected={sectionSelected}
-                    onSelect={() => setSelection({ kind: "section", sectionId: section.id })}
-                    handleClassName="left-2 top-3 h-8 w-8 opacity-0 group-hover:opacity-100"
-                  >
-                    <LandingSection section={section} theme={page.theme} interactive={false} />
-                    {section.elements.length > 0 &&
-                    (sectionSelected ||
-                      (selection.kind === "element" && selection.sectionId === section.id)) ? (
-                      <div
-                        className="border-t px-6 py-3"
-                        style={{ background: "var(--lp-muted)", borderColor: "var(--lp-border)" }}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Sort elements in this section
-                        </p>
-                        <SortableContext
-                          items={section.elements.map((element) => element.id)}
-                          strategy={verticalListSortingStrategy}
+        <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
+          <div style={themeStyle(page.theme)}>
+            {page.sections.map((section) => {
+              const sectionSelected = selection.kind === "section" && selection.sectionId === section.id;
+              const elementIds = slotDefs(section.type)
+                .filter((slot) => slot.kind === "elements")
+                .flatMap((slot) => elementsSlot(section, slot.id).map((element) => element.id));
+              return (
+                <Overlay
+                  key={section.id}
+                  id={section.id}
+                  kind="section"
+                  label={section.name}
+                  selected={sectionSelected}
+                  data={{ sectionId: section.id }}
+                  onSelect={() => setSelection({ kind: "section", sectionId: section.id })}
+                >
+                  <SortableContext items={elementIds} strategy={verticalListSortingStrategy}>
+                    <LandingSection
+                      section={section}
+                      theme={page.theme}
+                      interactive={false}
+                      renderElement={(element: PageElement, slotId: string) => (
+                        <Overlay
+                          id={element.id}
+                          kind="element"
+                          label={element.type}
+                          selected={selection.kind === "element" && selection.elementId === element.id}
+                          data={{ sectionId: section.id, slotId, elementId: element.id }}
+                          onSelect={() =>
+                            setSelection({
+                              kind: "element",
+                              sectionId: section.id,
+                              slotId,
+                              elementId: element.id,
+                            })
+                          }
                         >
-                          <div className="space-y-2">
-                            {section.elements.map((element) => (
-                              <SortableRow
-                                key={element.id}
-                                id={element.id}
-                                kind="element"
-                                selected={
-                                  selection.kind === "element" && selection.elementId === element.id
-                                }
-                                onSelect={() =>
-                                  setSelection({
-                                    kind: "element",
-                                    sectionId: section.id,
-                                    elementId: element.id,
-                                  })
-                                }
-                                handleClassName="left-2 top-1/2 h-7 w-7 -translate-y-1/2"
-                              >
-                                <div className="rounded-md border bg-background py-2 pl-12 pr-3 text-sm capitalize">
-                                  {element.type}
-                                  {typeof element.props.label === "string"
-                                    ? ` · ${element.props.label}`
-                                    : typeof element.props.text === "string"
-                                      ? ` · ${element.props.text.slice(0, 40)}`
-                                      : ""}
-                                </div>
-                              </SortableRow>
-                            ))}
-                          </div>
-                        </SortableContext>
-                      </div>
-                    ) : null}
-                  </SortableRow>
-                );
-              })}
-            </div>
-          </SortableContext>
-        </DndContext>
+                          <LandingElement element={element} interactive={false} />
+                        </Overlay>
+                      )}
+                      renderEmptySlot={(slotId) => {
+                        const def = slotDefs(section.type).find((slot) => slot.id === slotId) as
+                          | SlotDefinition
+                          | undefined;
+                        if (!def || def.kind === "text") return null;
+                        const filled =
+                          def.kind === "elements" ? elementsSlot(section, slotId).length > 0 : false;
+                        return <EmptySlot sectionId={section.id} slot={def} compact={filled} />;
+                      }}
+                    />
+                  </SortableContext>
+                </Overlay>
+              );
+            })}
+          </div>
+        </SortableContext>
       </div>
     </div>
   );

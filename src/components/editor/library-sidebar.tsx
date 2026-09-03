@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import {
   Box,
   Layers,
@@ -13,10 +14,42 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ELEMENT_CATALOG, SECTION_CATALOG } from "@/lib/defaults";
-import type { SavedComponent } from "@/lib/types";
+import type { ElementType, SavedComponent, SectionType } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { useEditor } from "@/components/editor/editor-context";
 
 const groups = ["Structure", "Story", "Proof", "Convert"] as const;
+
+function DraggableItem({
+  id,
+  data,
+  className,
+  disabled,
+  onClick,
+  children,
+}: {
+  id: string;
+  data: Record<string, unknown>;
+  className?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data, disabled });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(className, isDragging && "opacity-40")}
+      {...listeners}
+      {...attributes}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function LibrarySidebar() {
   const { addSection, addElement, selectedSection, insertSavedSection } = useEditor();
@@ -29,6 +62,15 @@ export function LibrarySidebar() {
       .catch(() => undefined);
   }, []);
 
+  function addLibraryElement(type: ElementType) {
+    if (!selectedSection) {
+      toast.message("Select a section, or drag this onto a slot");
+      return;
+    }
+    addElement(selectedSection.id, type);
+    toast.success("Element added");
+  }
+
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-card">
       <div className="border-b px-4 py-3">
@@ -37,7 +79,7 @@ export function LibrarySidebar() {
           Library
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Drop in sections or Shadcn elements. Elements attach to the selected section.
+          Drag a section onto the canvas, or drop an element into a slot. Text slots edit in the inspector.
         </p>
       </div>
       <Tabs defaultValue="sections" className="flex min-h-0 flex-1 flex-col">
@@ -58,9 +100,10 @@ export function LibrarySidebar() {
                   </p>
                   <div className="grid gap-2">
                     {SECTION_CATALOG.filter((item) => item.group === group).map((item) => (
-                      <button
+                      <DraggableItem
                         key={item.type}
-                        type="button"
+                        id={`lib-section-${item.type}`}
+                        data={{ kind: "library-section", type: item.type as SectionType }}
                         onClick={() => {
                           addSection(item.type);
                           toast.success(`${item.label} added`);
@@ -72,7 +115,7 @@ export function LibrarySidebar() {
                           {item.label}
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
-                      </button>
+                      </DraggableItem>
                     ))}
                   </div>
                 </div>
@@ -85,7 +128,7 @@ export function LibrarySidebar() {
             <div className="space-y-2 p-3">
               {!selectedSection ? (
                 <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  Select a section on the canvas first, then add a button, input, dropdown, or other element.
+                  Drag an element onto a highlighted slot, or select a section first.
                 </p>
               ) : (
                 <p className="px-1 text-xs text-muted-foreground">
@@ -93,16 +136,12 @@ export function LibrarySidebar() {
                 </p>
               )}
               {ELEMENT_CATALOG.map((item) => (
-                <button
+                <DraggableItem
                   key={item.type}
-                  type="button"
-                  disabled={!selectedSection}
-                  onClick={() => {
-                    if (!selectedSection) return;
-                    addElement(selectedSection.id, item.type);
-                    toast.success(`${item.label} added`);
-                  }}
-                  className="flex w-full items-start gap-3 rounded-lg border bg-background p-3 text-left disabled:opacity-50"
+                  id={`lib-element-${item.type}`}
+                  data={{ kind: "library-element", type: item.type as ElementType }}
+                  onClick={() => addLibraryElement(item.type)}
+                  className="flex w-full items-start gap-3 rounded-lg border bg-background p-3 text-left"
                 >
                   {item.type === "heading" || item.type === "paragraph" ? (
                     <Type className="mt-0.5 size-3.5 text-muted-foreground" />
@@ -113,7 +152,7 @@ export function LibrarySidebar() {
                     <span className="block text-sm font-medium">{item.label}</span>
                     <span className="text-xs text-muted-foreground">{item.description}</span>
                   </span>
-                </button>
+                </DraggableItem>
               ))}
             </div>
           </ScrollArea>

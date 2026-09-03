@@ -1,10 +1,12 @@
 import { nanoid } from "nanoid";
+import { migrateSection } from "@/lib/migrate";
 import type {
   ElementType,
   LandingPage,
   PageElement,
   PageSection,
   SectionType,
+  SlotValue,
   ThemeConfig,
 } from "@/lib/types";
 
@@ -48,6 +50,9 @@ export function createElement(
     id: nanoid(10),
     type,
     props: { ...defaultElementProps(type), ...props },
+    className: "",
+    htmlId: "",
+    styles: {},
   };
 }
 
@@ -82,6 +87,11 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
         alt: "Team collaborating",
         rounded: true,
       };
+    case "video":
+      return {
+        src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        alt: "Product video",
+      };
     case "separator":
       return { spacing: "md" };
     case "card":
@@ -93,6 +103,36 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
     default:
       return {};
   }
+}
+
+function cloneElementNode(element: PageElement): PageElement {
+  return {
+    ...element,
+    id: nanoid(10),
+    props: { ...element.props },
+    styles: element.styles ? { ...element.styles } : {},
+  };
+}
+
+export function cloneSection(section: PageSection): PageSection {
+  const slots: Record<string, SlotValue> = {};
+  for (const [key, value] of Object.entries(section.slots ?? {})) {
+    if (Array.isArray(value)) {
+      slots[key] = value.map(cloneElementNode);
+    } else if (value && typeof value === "object" && "type" in value && "id" in value) {
+      slots[key] = cloneElementNode(value as PageElement);
+    } else {
+      slots[key] = value;
+    }
+  }
+  return {
+    ...section,
+    id: nanoid(10),
+    name: `${section.name} copy`,
+    props: { ...section.props },
+    slots,
+    styles: section.styles ? { ...section.styles } : {},
+  };
 }
 
 export function createSection(type: SectionType): PageSection {
@@ -427,7 +467,7 @@ export function createSection(type: SectionType): PageSection {
     }),
   };
 
-  return { id: nanoid(10), ...presets[type]() };
+  return migrateSection({ id: nanoid(10), ...presets[type]() });
 }
 
 export function createBlankPage(
@@ -515,6 +555,7 @@ export const ELEMENT_CATALOG: {
   { type: "checkbox", label: "Checkbox", description: "Consent or option" },
   { type: "badge", label: "Badge", description: "Small label" },
   { type: "image", label: "Image", description: "Photo or illustration" },
+  { type: "video", label: "Video", description: "Embedded clip" },
   { type: "card", label: "Card", description: "Title, body, footer" },
   { type: "separator", label: "Separator", description: "Horizontal rule" },
 ];
