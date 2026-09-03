@@ -74,7 +74,7 @@ export function GradientField({
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px]">
-              <HexColorPicker color={parsed[stop]} onChange={(color) => update({ [stop]: color })} />
+          <HexColorPicker className="color-picker" color={parsed[stop]} onChange={(color) => update({ [stop]: color })} />
             </PopoverContent>
           </Popover>
         ))}

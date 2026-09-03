@@ -105,7 +105,7 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
   }
 }
 
-function cloneElementNode(element: PageElement): PageElement {
+export function cloneElementNode(element: PageElement): PageElement {
   return {
     ...element,
     id: nanoid(10),

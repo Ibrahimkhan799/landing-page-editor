@@ -77,8 +77,11 @@ export type StyleProps = {
   alignItems?: string;
   gap?: string;
   width?: string;
+  minWidth?: string;
   maxWidth?: string;
   height?: string;
+  minHeight?: string;
+  maxHeight?: string;
   padding?: Partial<BoxEdges>;
   margin?: Partial<BoxEdges>;
   color?: string;
@@ -86,9 +89,12 @@ export type StyleProps = {
   backgroundImage?: string;
   fontSize?: string;
   fontWeight?: string;
+  fontStyle?: string;
   lineHeight?: string;
   letterSpacing?: string;
   textAlign?: string;
+  textDecoration?: string;
+  textTransform?: string;
   borderWidth?: string;
   borderStyle?: string;
   borderColor?: string;
@@ -96,6 +102,17 @@ export type StyleProps = {
   boxShadow?: string;
   opacity?: string;
   overflow?: string;
+  position?: string;
+  top?: string;
+  right?: string;
+  bottom?: string;
+  left?: string;
+  zIndex?: string;
+  rotate?: string;
+  scale?: string;
+  filterBlur?: string;
+  backdropBlur?: string;
+  cursor?: string;
 };
 
 export type NodeMeta = {

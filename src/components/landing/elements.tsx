@@ -52,6 +52,7 @@ export function LandingElement({
     id: element.htmlId || undefined,
     className: element.className || undefined,
     style: styleToCss(element.styles),
+    "data-editor-node": element.id,
   };
 
   switch (element.type) {
@@ -102,7 +103,7 @@ export function LandingElement({
       };
       if (!interactive) {
         return (
-          <span id={element.htmlId || undefined} className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
+          <span id={element.htmlId || undefined} data-editor-node={element.id} className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
             {asString(p.label, "Button")}
           </span>
         );
@@ -110,6 +111,7 @@ export function LandingElement({
       return (
         <a
           id={element.htmlId || undefined}
+          data-editor-node={element.id}
           href={asString(p.href, "#")}
           className={cn(className, "inline-flex items-center justify-center px-4 py-2")}
           style={style}
@@ -120,7 +122,7 @@ export function LandingElement({
     }
     case "input":
       return (
-        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Label")}</Label>
           <Input
             id={element.htmlId || undefined}
@@ -137,7 +139,7 @@ export function LandingElement({
       );
     case "textarea":
       return (
-        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Message")}</Label>
           <Textarea
             id={element.htmlId || undefined}
@@ -157,7 +159,7 @@ export function LandingElement({
         .map((line) => line.trim())
         .filter(Boolean);
       return (
-        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
+        <div className="grid w-full max-w-md gap-2" data-editor-node={element.id} style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Select")}</Label>
           <Select disabled={!interactive}>
             <SelectTrigger id={element.htmlId || undefined} className={element.className} style={{ borderRadius: "var(--lp-radius)" }}>
@@ -176,7 +178,7 @@ export function LandingElement({
     }
     case "checkbox":
       return (
-        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} style={styleToCss(element.styles)}>
+        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} data-editor-node={element.id} style={styleToCss(element.styles)}>
           <Checkbox disabled={!interactive} defaultChecked={asBool(p.checked)} />
           {asString(p.label, "Checkbox")}
         </label>
@@ -186,6 +188,7 @@ export function LandingElement({
       return (
         <Badge
           id={element.htmlId || undefined}
+          data-editor-node={element.id}
           className={element.className}
           style={{
             ...(variant === "primary"
@@ -205,6 +208,7 @@ export function LandingElement({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           id={element.htmlId || undefined}
+          data-editor-node={element.id}
           src={asString(p.src)}
           alt={asString(p.alt, "")}
           className={cn("w-full object-cover", asBool(p.rounded, true) && "rounded-[var(--lp-radius)]", element.className)}
@@ -215,6 +219,7 @@ export function LandingElement({
       return (
         <video
           id={element.htmlId || undefined}
+          data-editor-node={element.id}
           src={asString(p.src)}
           className={cn("w-full rounded-[var(--lp-radius)]", element.className)}
           style={styleToCss(element.styles)}
@@ -224,11 +229,12 @@ export function LandingElement({
         />
       );
     case "separator":
-      return <Separator id={element.htmlId || undefined} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} />;
+      return <Separator id={element.htmlId || undefined} data-editor-node={element.id} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} style={styleToCss(element.styles)} />;
     case "card":
       return (
         <Card
           id={element.htmlId || undefined}
+          data-editor-node={element.id}
           className={cn("max-w-sm", element.className)}
           style={{ borderRadius: "var(--lp-radius)", background: "var(--lp-card)", ...styleToCss(element.styles) }}
         >

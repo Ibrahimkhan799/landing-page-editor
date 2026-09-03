@@ -7,6 +7,7 @@ import { useEditor } from "@/components/editor/editor-context";
 import { MediaPicker } from "@/components/editor/media-picker";
 import { NodeMetaEditor } from "@/components/editor/style-editor";
 import { ThemePanel } from "@/components/editor/theme-panel";
+import { useComputedStyles } from "@/components/editor/use-computed-styles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -328,11 +329,15 @@ function ElementFields() {
 }
 
 function StyleTab() {
-  const { selectedSection, selectedElement, updateSection, updateElementMeta } = useEditor();
+  const { page, selectedSection, selectedElement, updateSection, updateElementMeta } = useEditor();
+  const nodeId = selectedElement?.id ?? selectedSection?.id ?? null;
+  const { computed } = useComputedStyles(nodeId, page);
   if (selectedElement && selectedSection) {
     return (
       <NodeMetaEditor
+        key={selectedElement.id}
         node={selectedElement}
+        computed={computed}
         onChange={(patch) => updateElementMeta(selectedSection.id, selectedElement.id, patch)}
       />
     );
@@ -340,7 +345,9 @@ function StyleTab() {
   if (selectedSection) {
     return (
       <NodeMetaEditor
+        key={selectedSection.id}
         node={selectedSection}
+        computed={computed}
         onChange={(patch) => updateSection(selectedSection.id, patch)}
       />
     );
