@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { BookmarkPlus, Copy, Trash2 } from "lucide-react";
+import { BookmarkPlus, Component, Copy, Trash2, Unlink } from "lucide-react";
 import { useEditor } from "@/components/editor/editor-context";
 import { MediaPicker } from "@/components/editor/media-picker";
 import { NodeMetaEditor } from "@/components/editor/style-editor";
@@ -24,6 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { slotDefs, textSlot } from "@/lib/slots";
+import { cloneSection } from "@/lib/defaults";
+import { editingBucket } from "@/lib/node-styles";
+import type { InteractionState } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -58,35 +62,45 @@ function TextField({
 }
 
 export function Inspector() {
-  const { selectedSection, selectedElement, selectedSlotId } = useEditor();
+  const { selectedSection, selectedElement, selectedElements, selectedSlotId } = useEditor();
+  const multi = selectedElements.length > 1;
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l bg-card">
-      <Tabs defaultValue="content" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b px-3 py-3">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="style">Style</TabsTrigger>
-            <TabsTrigger value="theme">Theme</TabsTrigger>
+    <aside className="flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white">
+      <Tabs defaultValue="style" className="flex min-h-0 flex-1 flex-col">
+        <div className="border-b border-zinc-200 px-2 py-1.5">
+          <TabsList className="grid h-7 w-full grid-cols-3 bg-zinc-100 p-0.5">
+            <TabsTrigger value="content" className="h-6 text-[11px]">
+              Content
+            </TabsTrigger>
+            <TabsTrigger value="style" className="h-6 text-[11px]">
+              Design
+            </TabsTrigger>
+            <TabsTrigger value="theme" className="h-6 text-[11px]">
+              Theme
+            </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="content" className="min-h-0 flex-1">
+        <TabsContent value="content" className="mt-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="space-y-4 p-4">
+            <div className="space-y-4 p-3">
               {!selectedSection && !selectedElement ? <PageFields /> : null}
-              {selectedSection && !selectedElement ? <SectionFields slotId={selectedSlotId} /> : null}
+              {selectedSection && !selectedElement && !multi ? <SectionFields slotId={selectedSlotId} /> : null}
               {selectedElement && selectedSection ? <ElementFields /> : null}
+              {multi ? (
+                <p className="text-[12px] text-zinc-500">{selectedElements.length} elements selected. Use align tools on the canvas or edit shared styles in Design.</p>
+              ) : null}
             </div>
           </ScrollArea>
         </TabsContent>
-        <TabsContent value="style" className="min-h-0 flex-1">
+        <TabsContent value="style" className="mt-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="p-4">
+            <div className="p-3">
               <StyleTab />
             </div>
           </ScrollArea>
         </TabsContent>
-        <TabsContent value="theme" className="min-h-0 flex-1">
+        <TabsContent value="theme" className="mt-0 min-h-0 flex-1">
           <ThemePanel />
         </TabsContent>
       </Tabs>
@@ -119,8 +133,16 @@ function PageFields() {
 }
 
 function SectionFields({ slotId }: { slotId: string | null }) {
-  const { selectedSection, updateSection, updateSectionProp, updateSlot, removeSection, duplicateSection } =
-    useEditor();
+  const {
+    selectedSection,
+    updateSection,
+    updateSectionProp,
+    updateSlot,
+    removeSection,
+    duplicateSection,
+    replaceSection,
+    syncComponentInstances,
+  } = useEditor();
   if (!selectedSection) return null;
 
   async function saveComponent() {
@@ -130,9 +152,39 @@ function SectionFields({ slotId }: { slotId: string | null }) {
     const response = await fetch("/api/components", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, section: selectedSection }),
+      body: JSON.stringify({ name, section: { ...selectedSection, componentId: undefined } }),
     });
-    if (response.ok) toast.success("Component saved to the library");
+    if (response.ok) {
+      const saved = await response.json();
+      updateSection(selectedSection.id, { componentId: saved.id });
+      toast.success("Component saved");
+    }
+  }
+
+  async function resetInstance() {
+    if (!selectedSection?.componentId) return;
+    const response = await fetch(`/api/components/${selectedSection.componentId}`);
+    if (!response.ok) return;
+    const component = await response.json();
+    const next = cloneSection({ ...component.section, id: "tmp" }, { id: selectedSection.id, name: selectedSection.name });
+    next.componentId = component.id;
+    replaceSection(selectedSection.id, next);
+    toast.success("Reset to component");
+  }
+
+  async function pushToComponent() {
+    if (!selectedSection?.componentId) return;
+    const response = await fetch(`/api/components/${selectedSection.componentId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section: selectedSection, name: selectedSection.name }),
+    });
+    if (!response.ok) {
+      toast.error("Could not update component");
+      return;
+    }
+    syncComponentInstances(selectedSection.componentId, selectedSection.id);
+    toast.success("Pushed to component");
   }
 
   return (
@@ -159,6 +211,31 @@ function SectionFields({ slotId }: { slotId: string | null }) {
         value={selectedSection.name}
         onChange={(value) => updateSection(selectedSection.id, { name: value })}
       />
+      {selectedSection.componentId ? (
+        <div className="space-y-2 rounded-md border border-violet-200 bg-violet-50 p-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-violet-900">
+            <Component className="size-3.5" />
+            Component instance
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={pushToComponent}>
+              Push to main
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={resetInstance}>
+              Reset
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[11px]"
+              onClick={() => updateSection(selectedSection.id, { componentId: undefined })}
+            >
+              <Unlink className="size-3.5" />
+              Detach
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <Separator />
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Slots</p>
       {slotId ? (
@@ -252,7 +329,18 @@ function ElementFields() {
           <Trash2 className="size-4" />
         </Button>
       </div>
+      {selectedElement.type === "button" ? (
+        <Field label="Disabled">
+          <Switch
+            checked={Boolean(selectedElement.props.disabled)}
+            onCheckedChange={(checked) =>
+              updateElementProp(selectedSection.id, selectedElement.id, "disabled", checked)
+            }
+          />
+        </Field>
+      ) : null}
       {Object.entries(selectedElement.props).map(([key, value]) => {
+        if (key === "disabled") return null;
         if (key === "src" && (selectedElement.type === "image" || selectedElement.type === "video")) {
           return (
             <MediaPicker
@@ -329,28 +417,81 @@ function ElementFields() {
 }
 
 function StyleTab() {
-  const { page, selectedSection, selectedElement, updateSection, updateElementMeta } = useEditor();
-  const nodeId = selectedElement?.id ?? selectedSection?.id ?? null;
+  const {
+    page,
+    selectedSection,
+    selectedElement,
+    selectedElements,
+    updateSection,
+    updateElementMeta,
+    updateSelectedStyles,
+    breakpoint,
+    previewState,
+    setPreviewState,
+  } = useEditor();
+  const node = selectedElement ?? (selectedElements.length ? selectedElements[0] : selectedSection);
+  const nodeId = node && "type" in node && selectedElement ? selectedElement.id : selectedSection?.id ?? null;
   const { computed } = useComputedStyles(nodeId, page);
-  if (selectedElement && selectedSection) {
-    return (
-      <NodeMetaEditor
-        key={selectedElement.id}
-        node={selectedElement}
-        computed={computed}
-        onChange={(patch) => updateElementMeta(selectedSection.id, selectedElement.id, patch)}
-      />
-    );
+  const swatches = Object.values(page.theme.colors);
+  const showStates = selectedElement?.type === "button";
+  const states: { id: InteractionState; label: string }[] = [
+    { id: "default", label: "Default" },
+    { id: "hover", label: "Hover" },
+    { id: "focus", label: "Focus" },
+    { id: "disabled", label: "Disabled" },
+  ];
+
+  if (!node) {
+    return <p className="text-[12px] text-zinc-400">Select a layer to edit styles.</p>;
   }
-  if (selectedSection) {
-    return (
+
+  const local = editingBucket(node, breakpoint, previewState);
+  const bucketLabel =
+    previewState !== "default"
+      ? previewState
+      : breakpoint === "desktop"
+        ? "desktop"
+        : breakpoint;
+
+  return (
+    <div className="space-y-3">
+      {showStates ? (
+        <div className="grid grid-cols-4 gap-0.5 rounded-md bg-zinc-100 p-0.5">
+          {states.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPreviewState(item.id)}
+              className={cn(
+                "h-6 rounded text-[10px] font-medium",
+                previewState === item.id ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+        Editing {bucketLabel} styles
+      </p>
       <NodeMetaEditor
-        key={selectedSection.id}
-        node={selectedSection}
+        key={`${"id" in node ? node.id : "node"}-${breakpoint}-${previewState}`}
+        node={{ ...node, styles: local }}
         computed={computed}
-        onChange={(patch) => updateSection(selectedSection.id, patch)}
+        swatches={swatches}
+        onChange={(patch) => {
+          if (patch.styles) {
+            updateSelectedStyles(patch.styles);
+            return;
+          }
+          if (selectedElement && selectedSection) {
+            updateElementMeta(selectedSection.id, selectedElement.id, patch);
+            return;
+          }
+          if (selectedSection) updateSection(selectedSection.id, patch);
+        }}
       />
-    );
-  }
-  return <p className="text-xs text-muted-foreground">Select a section or element to edit CSS, classes, and IDs.</p>;
+    </div>
+  );
 }

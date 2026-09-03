@@ -70,11 +70,16 @@ export type BoxEdges = {
   left: string;
 };
 
+export type Breakpoint = "desktop" | "tablet" | "mobile";
+
+export type InteractionState = "default" | "hover" | "focus" | "disabled";
+
 export type StyleProps = {
   display?: string;
   flexDirection?: string;
   justifyContent?: string;
   alignItems?: string;
+  alignSelf?: string;
   gap?: string;
   width?: string;
   minWidth?: string;
@@ -87,6 +92,7 @@ export type StyleProps = {
   color?: string;
   background?: string;
   backgroundImage?: string;
+  fontFamily?: string;
   fontSize?: string;
   fontWeight?: string;
   fontStyle?: string;
@@ -115,10 +121,23 @@ export type StyleProps = {
   cursor?: string;
 };
 
+export type StyleOverrides = {
+  tablet?: StyleProps;
+  mobile?: StyleProps;
+};
+
+export type InteractionStates = {
+  hover?: StyleProps;
+  focus?: StyleProps;
+  disabled?: StyleProps;
+};
+
 export type NodeMeta = {
   className?: string;
   htmlId?: string;
   styles?: StyleProps;
+  responsive?: StyleOverrides;
+  states?: InteractionStates;
 };
 
 export type PageElement = NodeMeta & {
@@ -136,6 +155,7 @@ export type PageSection = NodeMeta & {
   props: Record<string, unknown>;
   slots?: Record<string, SlotValue>;
   elements?: PageElement[];
+  componentId?: string;
 };
 
 export type LandingPage = {
@@ -157,8 +177,25 @@ export type SavedComponent = {
   section: Omit<PageSection, "id">;
 };
 
+export type ElementRef = {
+  sectionId: string;
+  slotId: string;
+  elementId: string;
+};
+
 export type Selection =
   | { kind: "page" }
   | { kind: "section"; sectionId: string }
   | { kind: "slot"; sectionId: string; slotId: string }
-  | { kind: "element"; sectionId: string; slotId: string; elementId: string };
+  | { kind: "element"; sectionId: string; slotId: string; elementId: string }
+  | { kind: "elements"; items: ElementRef[] };
+
+export type AlignKind =
+  | "left"
+  | "center"
+  | "right"
+  | "top"
+  | "middle"
+  | "bottom"
+  | "distribute-horizontal"
+  | "distribute-vertical";

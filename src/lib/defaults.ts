@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { migrateSection } from "@/lib/migrate";
+import { cloneNodeMeta, cloneStyleProps } from "@/lib/node-styles";
 import type {
   ElementType,
   LandingPage,
@@ -108,13 +109,17 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
 export function cloneElementNode(element: PageElement): PageElement {
   return {
     ...element,
+    ...cloneNodeMeta(element),
     id: nanoid(10),
     props: { ...element.props },
-    styles: element.styles ? { ...element.styles } : {},
+    styles: cloneStyleProps(element.styles),
   };
 }
 
-export function cloneSection(section: PageSection): PageSection {
+export function cloneSection(
+  section: PageSection,
+  options?: { id?: string; name?: string },
+): PageSection {
   const slots: Record<string, SlotValue> = {};
   for (const [key, value] of Object.entries(section.slots ?? {})) {
     if (Array.isArray(value)) {
@@ -127,11 +132,12 @@ export function cloneSection(section: PageSection): PageSection {
   }
   return {
     ...section,
-    id: nanoid(10),
-    name: `${section.name} copy`,
+    ...cloneNodeMeta(section),
+    id: options?.id ?? nanoid(10),
+    name: options?.name ?? `${section.name} copy`,
     props: { ...section.props },
     slots,
-    styles: section.styles ? { ...section.styles } : {},
+    styles: cloneStyleProps(section.styles),
   };
 }
 

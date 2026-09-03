@@ -29,7 +29,7 @@ export function GradientField({
   value,
   onChange,
 }: {
-  label: string;
+  label?: string;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -50,7 +50,7 @@ export function GradientField({
 
   return (
     <div className="grid gap-2">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {label ? <Label className="text-xs text-muted-foreground">{label}</Label> : null}
       <div className="h-10 rounded-md border" style={{ backgroundImage: gradient }} />
       <Select value={parsed.kind} onValueChange={(kind) => update({ kind })}>
         <SelectTrigger>

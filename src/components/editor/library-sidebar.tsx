@@ -2,14 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import {
-  Box,
-  Layers,
-  LayoutTemplate,
-  Puzzle,
-  Type,
-} from "lucide-react";
+import { Box, Layers, Puzzle, Type } from "lucide-react";
 import { toast } from "sonner";
+import { LayersPanel } from "@/components/editor/layers-panel";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,7 +46,7 @@ function DraggableItem({
   );
 }
 
-export function LibrarySidebar() {
+function InsertPanel() {
   const { addSection, addElement, selectedSection, insertSavedSection } = useEditor();
   const [components, setComponents] = useState<SavedComponent[]>([]);
 
@@ -68,125 +63,123 @@ export function LibrarySidebar() {
       return;
     }
     addElement(selectedSection.id, type);
-    toast.success("Element added");
   }
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-card">
-      <div className="border-b px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <LayoutTemplate className="size-4" />
-          Library
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Drag a section onto the canvas, or drop an element into a slot. Text slots edit in the inspector.
-        </p>
+    <Tabs defaultValue="sections" className="flex min-h-0 flex-1 flex-col">
+      <div className="px-2 pt-2">
+        <TabsList className="grid h-7 w-full grid-cols-3 bg-zinc-100 p-0.5">
+          <TabsTrigger value="sections" className="h-6 text-[11px]">
+            Sections
+          </TabsTrigger>
+          <TabsTrigger value="elements" className="h-6 text-[11px]">
+            Elements
+          </TabsTrigger>
+          <TabsTrigger value="saved" className="h-6 text-[11px]">
+            Saved
+          </TabsTrigger>
+        </TabsList>
       </div>
-      <Tabs defaultValue="sections" className="flex min-h-0 flex-1 flex-col">
-        <div className="px-3 pt-3">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="sections">Sections</TabsTrigger>
-            <TabsTrigger value="elements">Elements</TabsTrigger>
-            <TabsTrigger value="saved">Saved</TabsTrigger>
+      <TabsContent value="sections" className="mt-0 min-h-0 flex-1">
+        <ScrollArea className="h-full">
+          <div className="space-y-4 p-2">
+            {groups.map((group) => (
+              <div key={group}>
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  {group}
+                </p>
+                <div className="grid gap-1">
+                  {SECTION_CATALOG.filter((item) => item.group === group).map((item) => (
+                    <DraggableItem
+                      key={item.type}
+                      id={`lib-section-${item.type}`}
+                      data={{ kind: "library-section", type: item.type as SectionType }}
+                      onClick={() => addSection(item.type)}
+                      className="rounded-md px-2 py-1.5 text-left hover:bg-zinc-100"
+                    >
+                      <div className="flex items-center gap-2 text-[12px] font-medium">
+                        <Layers className="size-3.5 text-zinc-400" />
+                        {item.label}
+                      </div>
+                    </DraggableItem>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </TabsContent>
+      <TabsContent value="elements" className="mt-0 min-h-0 flex-1">
+        <ScrollArea className="h-full">
+          <div className="space-y-0.5 p-2">
+            {ELEMENT_CATALOG.map((item) => (
+              <DraggableItem
+                key={item.type}
+                id={`lib-element-${item.type}`}
+                data={{ kind: "library-element", type: item.type as ElementType }}
+                onClick={() => addLibraryElement(item.type)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-zinc-100"
+              >
+                {item.type === "heading" || item.type === "paragraph" ? (
+                  <Type className="size-3.5 text-zinc-400" />
+                ) : (
+                  <Box className="size-3.5 text-zinc-400" />
+                )}
+                <span className="text-[12px]">{item.label}</span>
+              </DraggableItem>
+            ))}
+          </div>
+        </ScrollArea>
+      </TabsContent>
+      <TabsContent value="saved" className="mt-0 min-h-0 flex-1">
+        <ScrollArea className="h-full">
+          <div className="space-y-1 p-2">
+            {components.length === 0 ? (
+              <p className="px-1 text-[11px] text-zinc-400">Save a section from the inspector to reuse it as a component.</p>
+            ) : (
+              components.map((component) => (
+                <div key={component.id} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-zinc-100">
+                  <div className="flex min-w-0 items-center gap-2 text-[12px]">
+                    <Puzzle className="size-3.5 text-[#7b61ff]" />
+                    <span className="truncate">{component.name}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() => insertSavedSection(component)}
+                  >
+                    Insert
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+export function LibrarySidebar() {
+  return (
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-zinc-200 bg-white">
+      <Tabs defaultValue="layers" className="flex min-h-0 flex-1 flex-col">
+        <div className="border-b border-zinc-200 px-2 py-1.5">
+          <TabsList className="grid h-7 w-full grid-cols-2 bg-zinc-100 p-0.5">
+            <TabsTrigger value="layers" className="h-6 text-[11px]">
+              Layers
+            </TabsTrigger>
+            <TabsTrigger value="insert" className="h-6 text-[11px]">
+              Insert
+            </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="sections" className="min-h-0 flex-1">
-          <ScrollArea className="h-full">
-            <div className="space-y-5 p-3">
-              {groups.map((group) => (
-                <div key={group}>
-                  <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {group}
-                  </p>
-                  <div className="grid gap-2">
-                    {SECTION_CATALOG.filter((item) => item.group === group).map((item) => (
-                      <DraggableItem
-                        key={item.type}
-                        id={`lib-section-${item.type}`}
-                        data={{ kind: "library-section", type: item.type as SectionType }}
-                        onClick={() => {
-                          addSection(item.type);
-                          toast.success(`${item.label} added`);
-                        }}
-                        className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/60"
-                      >
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <Layers className="size-3.5 text-muted-foreground" />
-                          {item.label}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
-                      </DraggableItem>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+        <TabsContent value="layers" className="mt-0 min-h-0 flex-1">
+          <LayersPanel />
         </TabsContent>
-        <TabsContent value="elements" className="min-h-0 flex-1">
-          <ScrollArea className="h-full">
-            <div className="space-y-2 p-3">
-              {!selectedSection ? (
-                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  Drag an element onto a highlighted slot, or select a section first.
-                </p>
-              ) : (
-                <p className="px-1 text-xs text-muted-foreground">
-                  Adding to <span className="font-medium text-foreground">{selectedSection.name}</span>
-                </p>
-              )}
-              {ELEMENT_CATALOG.map((item) => (
-                <DraggableItem
-                  key={item.type}
-                  id={`lib-element-${item.type}`}
-                  data={{ kind: "library-element", type: item.type as ElementType }}
-                  onClick={() => addLibraryElement(item.type)}
-                  className="flex w-full items-start gap-3 rounded-lg border bg-background p-3 text-left"
-                >
-                  {item.type === "heading" || item.type === "paragraph" ? (
-                    <Type className="mt-0.5 size-3.5 text-muted-foreground" />
-                  ) : (
-                    <Box className="mt-0.5 size-3.5 text-muted-foreground" />
-                  )}
-                  <span>
-                    <span className="block text-sm font-medium">{item.label}</span>
-                    <span className="text-xs text-muted-foreground">{item.description}</span>
-                  </span>
-                </DraggableItem>
-              ))}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-        <TabsContent value="saved" className="min-h-0 flex-1">
-          <ScrollArea className="h-full">
-            <div className="space-y-2 p-3">
-              {components.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Save a selected section from the inspector to reuse it on other client pages.
-                </p>
-              ) : (
-                components.map((component) => (
-                  <div key={component.id} className="rounded-lg border p-3">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Puzzle className="size-3.5" />
-                      {component.name}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2"
-                      onClick={() => {
-                        insertSavedSection(component);
-                        toast.success("Component inserted");
-                      }}
-                    >
-                      Insert
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
+        <TabsContent value="insert" className="mt-0 flex min-h-0 flex-1 flex-col">
+          <InsertPanel />
         </TabsContent>
       </Tabs>
     </aside>

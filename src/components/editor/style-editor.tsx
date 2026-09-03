@@ -16,19 +16,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { displayed } from "@/lib/computed-styles";
+import { FONT_OPTIONS } from "@/lib/defaults";
 import type { NodeMeta, StyleProps } from "@/lib/types";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+    <div className="grid gap-1">
+      <Label className="text-[11px] text-zinc-500">{label}</Label>
       {children}
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
+  return <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{children}</p>;
 }
 
 function SelectField({
@@ -46,7 +47,7 @@ function SelectField({
   return (
     <Field label={label}>
       <Select value={current} onValueChange={onChange}>
-        <SelectTrigger className="h-8">
+        <SelectTrigger className="h-7 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -92,10 +93,12 @@ export function StyleEditor({
   styles,
   computed,
   onChange,
+  swatches,
 }: {
   styles?: StyleProps;
   computed?: StyleProps;
   onChange: (styles: StyleProps) => void;
+  swatches?: string[];
 }) {
   const current = styles ?? {};
   const live = computed ?? {};
@@ -105,12 +108,19 @@ export function StyleEditor({
   function show(key: keyof StyleProps) {
     return displayed(current, live, key);
   }
+  const fontValue = current.fontFamily || "__inherit__";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SectionTitle>Fill & stroke</SectionTitle>
-      <FillPopover styles={current} computed={live} onChange={patch} />
-      <ColorField label="Text" value={current.color} resolved={live.color} onChange={(color) => patch({ color })} />
+      <FillPopover styles={current} computed={live} onChange={patch} swatches={swatches} />
+      <ColorField
+        label="Text"
+        value={current.color}
+        resolved={live.color}
+        onChange={(color) => patch({ color })}
+        swatches={swatches}
+      />
       <div className="grid grid-cols-2 gap-2">
         <Field label="Stroke">
           <Input
@@ -130,6 +140,7 @@ export function StyleEditor({
         value={current.borderColor}
         resolved={live.borderColor}
         onChange={(borderColor) => patch({ borderColor })}
+        swatches={swatches}
       />
       <Field label="Radius">
         <Input
@@ -153,6 +164,24 @@ export function StyleEditor({
       </div>
       <Separator />
       <SectionTitle>Typography</SectionTitle>
+      <Field label="Font">
+        <Select
+          value={fontValue}
+          onValueChange={(fontFamily) => patch({ fontFamily: fontFamily === "__inherit__" ? "" : fontFamily })}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="Inherit" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__inherit__">Inherit</SelectItem>
+            {FONT_OPTIONS.map((font) => (
+              <SelectItem key={font.value} value={font.value}>
+                <span style={{ fontFamily: font.value }}>{font.label}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Size">
           <Input value={current.fontSize || live.fontSize || ""} onChange={(event) => patch({ fontSize: event.target.value })} />
@@ -272,6 +301,12 @@ export function StyleEditor({
           <Input value={current.gap || live.gap || ""} onChange={(event) => patch({ gap: event.target.value })} />
         </Field>
         <SelectField
+          label="Align self"
+          value={show("alignSelf") || "auto"}
+          options={["auto", "flex-start", "center", "flex-end", "stretch", "baseline"]}
+          onChange={(alignSelf) => patch({ alignSelf: alignSelf === "auto" ? "" : alignSelf })}
+        />
+        <SelectField
           label="Overflow"
           value={show("overflow") || "visible"}
           options={["visible", "hidden", "auto", "scroll", "clip"]}
@@ -288,20 +323,27 @@ export function NodeMetaEditor({
   node,
   computed,
   onChange,
+  swatches,
 }: {
   node: NodeMeta;
   computed?: StyleProps;
   onChange: (patch: NodeMeta) => void;
+  swatches?: string[];
 }) {
   return (
     <div className="space-y-4">
+      <StyleEditor
+        styles={node.styles}
+        computed={computed}
+        onChange={(styles) => onChange({ styles })}
+        swatches={swatches}
+      />
       <IdentityFields
         className={node.className}
         htmlId={node.htmlId}
         onClassName={(className) => onChange({ className })}
         onHtmlId={(htmlId) => onChange({ htmlId })}
       />
-      <StyleEditor styles={node.styles} computed={computed} onChange={(styles) => onChange({ styles })} />
     </div>
   );
 }

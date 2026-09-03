@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     className: body.section.className,
     htmlId: body.section.htmlId,
     styles: body.section.styles,
+    responsive: body.section.responsive,
+    states: body.section.states,
     elements: body.section.elements,
   };
   const saved = await saveComponent({

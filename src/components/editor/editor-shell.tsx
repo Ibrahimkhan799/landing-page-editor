@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ExternalLink, Monitor, Smartphone, Tablet, Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { EditorCanvas } from "@/components/editor/canvas";
 import { EditorDnd } from "@/components/editor/editor-dnd";
-import { useEditor } from "@/components/editor/editor-context";
+import { isTypingTarget, useEditor } from "@/components/editor/editor-context";
 import { Inspector } from "@/components/editor/inspector";
 import { LibrarySidebar } from "@/components/editor/library-sidebar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import type { Breakpoint } from "@/lib/types";
 
 export function EditorShell() {
   const {
@@ -24,12 +25,22 @@ export function EditorShell() {
     setSelection,
     selectedSection,
     selectedElement,
+    selectedRefs,
     duplicateSection,
     removeSection,
     duplicateElement,
     removeElement,
+    copySelection,
+    pasteClipboard,
+    selectSlotSiblings,
+    breakpoint,
+    setBreakpoint,
+    setPreviewState,
   } = useEditor();
-  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+
+  useEffect(() => {
+    if (selectedElement?.type !== "button") setPreviewState("default");
+  }, [selectedElement, setPreviewState]);
 
   async function persist() {
     try {
@@ -42,22 +53,45 @@ export function EditorShell() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (isTypingTarget(event.target)) return;
+      const meta = event.metaKey || event.ctrlKey;
       if (event.key === "Escape") {
         setSelection({ kind: "page" });
+        setPreviewState("default");
         return;
       }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedSection) {
         event.preventDefault();
-        if (selectedElement) removeElement(selectedSection.id, selectedElement.id);
-        else removeSection(selectedSection.id);
+        if (selectedRefs.length) {
+          for (const ref of selectedRefs) removeElement(ref.sectionId, ref.elementId);
+        } else {
+          removeSection(selectedSection.id);
+        }
         return;
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d" && selectedSection) {
+      if (meta && event.key.toLowerCase() === "d" && selectedSection) {
         event.preventDefault();
         if (selectedElement) duplicateElement(selectedSection.id, selectedElement.id);
         else duplicateSection(selectedSection.id);
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        toast.message("Copied");
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        void pasteClipboard(event.shiftKey).then((ok) => {
+          if (ok) toast.message(event.shiftKey ? "Pasted in place" : "Pasted");
+        });
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "a" && selectedElement && selectedSection) {
+        event.preventDefault();
+        const slotId = selection.kind === "element" ? selection.slotId : selectedRefs[0]?.slotId;
+        if (slotId) selectSlotSiblings(selectedSection.id, slotId);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -65,35 +99,36 @@ export function EditorShell() {
   }, [
     selectedSection,
     selectedElement,
+    selectedRefs,
+    selection,
     setSelection,
+    setPreviewState,
     removeElement,
     removeSection,
     duplicateElement,
     duplicateSection,
+    copySelection,
+    pasteClipboard,
+    selectSlotSiblings,
   ]);
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b px-3">
-        <Button asChild variant="ghost" size="sm">
+    <div className="flex h-screen flex-col bg-white text-zinc-900">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2">
+        <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600">
           <Link href="/admin">
             <ArrowLeft className="size-4" />
-            Studio
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
           <Input
             value={page.name}
             onChange={(event) => updatePage({ name: event.target.value })}
-            className="h-8 max-w-xs border-transparent bg-transparent px-2 font-medium shadow-none focus-visible:border-input"
+            className="h-7 max-w-xs border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none focus-visible:border-zinc-200"
           />
         </div>
-        <Badge variant={page.status === "published" ? "default" : "secondary"}>{page.status}</Badge>
-        {dirty ? <span className="text-xs text-muted-foreground">Unsaved</span> : null}
-        {selection.kind !== "page" ? (
-          <span className="hidden text-xs text-muted-foreground md:inline">Del to remove · ⌘D duplicate</span>
-        ) : null}
-        <div className="flex rounded-md border p-0.5">
+        {dirty ? <span className="text-[11px] text-zinc-400">Unsaved</span> : null}
+        <div className="flex rounded-md bg-zinc-100 p-0.5">
           {(
             [
               ["desktop", Monitor],
@@ -101,32 +136,34 @@ export function EditorShell() {
               ["mobile", Smartphone],
             ] as const
           ).map(([value, Icon]) => (
-            <Button
+            <button
               key={value}
-              size="icon"
-              variant={device === value ? "secondary" : "ghost"}
-              className="h-8 w-8"
-              onClick={() => setDevice(value)}
+              type="button"
+              title={value}
+              className={cn(
+                "grid size-7 place-items-center rounded text-zinc-500",
+                breakpoint === value && "bg-white text-zinc-900 shadow-sm",
+              )}
+              onClick={() => setBreakpoint(value as Breakpoint)}
             >
-              <Icon className="size-4" />
-            </Button>
+              <Icon className="size-3.5" />
+            </button>
           ))}
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/p/${page.slug}`} target="_blank">
+        <Button asChild variant="ghost" size="icon" className="size-8 text-zinc-500">
+          <Link href={`/p/${page.slug}`} target="_blank" title="View live">
             <ExternalLink className="size-4" />
-            View live
           </Link>
         </Button>
-        <Button size="sm" onClick={persist} disabled={saving}>
-          <Save className="size-4" />
-          {saving ? "Saving…" : "Save"}
+        <Button size="sm" className="h-8 px-3" onClick={persist} disabled={saving}>
+          <Save className="size-3.5" />
+          {saving ? "Saving" : "Save"}
         </Button>
       </header>
       <div className="flex min-h-0 flex-1">
         <EditorDnd>
           <LibrarySidebar />
-          <EditorCanvas device={device} />
+          <EditorCanvas />
           <Inspector />
         </EditorDnd>
       </div>

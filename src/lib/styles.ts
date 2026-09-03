@@ -25,6 +25,7 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
   assign(out, "flexDirection", styles.flexDirection);
   assign(out, "justifyContent", styles.justifyContent);
   assign(out, "alignItems", styles.alignItems);
+  assign(out, "alignSelf", styles.alignSelf);
   assign(out, "gap", styles.gap);
   assign(out, "width", styles.width);
   assign(out, "minWidth", styles.minWidth);
@@ -35,6 +36,7 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
   assign(out, "color", styles.color);
   assign(out, "background", styles.background);
   assign(out, "backgroundImage", styles.backgroundImage);
+  assign(out, "fontFamily", styles.fontFamily);
   assign(out, "fontSize", styles.fontSize);
   assign(out, "fontWeight", styles.fontWeight);
   assign(out, "fontStyle", styles.fontStyle);
