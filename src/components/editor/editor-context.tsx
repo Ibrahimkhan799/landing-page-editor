@@ -6,7 +6,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -57,6 +59,10 @@ export function EditorProvider({
   children: ReactNode;
 }) {
   const [page, setPage] = useState(initialPage);
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
   const [selection, setSelection] = useState<Selection>({ kind: "page" });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -276,10 +282,11 @@ export function EditorProvider({
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      const response = await fetch(`/api/pages/${page.id}`, {
+      const snapshot = pageRef.current;
+      const response = await fetch(`/api/pages/${snapshot.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(page),
+        body: JSON.stringify(snapshot),
       });
       if (!response.ok) throw new Error("Save failed");
       const saved = (await response.json()) as LandingPage;
@@ -288,7 +295,7 @@ export function EditorProvider({
     } finally {
       setSaving(false);
     }
-  }, [page]);
+  }, []);
 
   const selectedSection = useMemo(() => {
     if (selection.kind === "page") return null;

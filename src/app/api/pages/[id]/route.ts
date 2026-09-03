@@ -13,7 +13,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const existing = await getPage(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const body = (await request.json()) as LandingPage;
+  let body: LandingPage;
+  try {
+    body = (await request.json()) as LandingPage;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const saved = await savePage({ ...existing, ...body, id });
   return NextResponse.json(saved);
 }

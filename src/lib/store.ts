@@ -35,6 +35,11 @@ export async function listPages(): Promise<LandingPage[]> {
       return JSON.parse(raw) as LandingPage;
     }),
   );
+  if (!pages.some((page) => page.id === "demo-northstar")) {
+    const demo = createDemoPage();
+    await savePage(demo);
+    pages.push(demo);
+  }
   return pages.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 

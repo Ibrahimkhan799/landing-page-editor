@@ -98,6 +98,9 @@ export function LandingSection({
               {str(p.ctaLabel, "Get started")}
             </a>
           </div>
+          <div className="mx-auto max-w-6xl pb-4">
+            <ElementStack elements={section.elements} interactive={interactive} />
+          </div>
         </header>
       );
     }
@@ -193,6 +196,7 @@ export function LandingSection({
               <span key={logo}>{logo}</span>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "features":
@@ -281,6 +285,7 @@ export function LandingSection({
               </div>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "testimonials":
@@ -304,6 +309,7 @@ export function LandingSection({
               </blockquote>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "pricing":
@@ -360,6 +366,7 @@ export function LandingSection({
               </div>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "faq":
@@ -382,6 +389,7 @@ export function LandingSection({
               </details>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "gallery":
@@ -402,6 +410,7 @@ export function LandingSection({
               />
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "team":
@@ -427,6 +436,7 @@ export function LandingSection({
               </div>
             ))}
           </div>
+          <ElementStack elements={section.elements} interactive={interactive} />
         </SectionShell>
       );
     case "cta":
@@ -451,6 +461,7 @@ export function LandingSection({
             >
               {str(p.ctaLabel)}
             </a>
+            <ElementStack elements={section.elements} interactive={interactive} />
           </div>
         </SectionShell>
       );
@@ -511,6 +522,9 @@ export function LandingSection({
           <p className="mx-auto mt-8 max-w-6xl text-xs" style={{ color: "var(--lp-muted-fg)" }}>
             {str(p.copyright)}
           </p>
+          <div className="mx-auto max-w-6xl">
+            <ElementStack elements={section.elements} interactive={interactive} />
+          </div>
         </footer>
       );
     case "custom":
