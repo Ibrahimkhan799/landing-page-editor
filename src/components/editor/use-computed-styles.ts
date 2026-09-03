@@ -15,7 +15,12 @@ export function useComputedStyles(nodeId: string | null, revision: unknown) {
     if (!nodeId) return;
     let cancelled = false;
     const read = () => {
-      const el = document.querySelector(`[data-editor-node="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
+      const matches = [
+        ...document.querySelectorAll(`[data-editor-node="${CSS.escape(nodeId)}"]`),
+      ] as HTMLElement[];
+      const el =
+        matches.find((node) => node.matches("span,a,h1,h2,h3,h4,p,img,video,label,button,section,header,footer")) ??
+        matches[0];
       if (!el || cancelled) return;
       setSnapshot({
         id: nodeId,
@@ -27,11 +32,11 @@ export function useComputedStyles(nodeId: string | null, revision: unknown) {
       });
     };
     const frame = requestAnimationFrame(read);
-    const timer = window.setTimeout(read, 50);
+    const later = window.setTimeout(read, 120);
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
+      window.clearTimeout(later);
     };
   }, [nodeId, revision]);
 

@@ -13,54 +13,58 @@ export function boxToCss(box?: Partial<BoxEdges>, prefix: "padding" | "margin" =
   return out;
 }
 
+function assign(out: CSSProperties, key: keyof CSSProperties, value: unknown) {
+  if (value === undefined || value === null || value === "") return;
+  (out as Record<string, unknown>)[key] = value;
+}
+
 export function styleToCss(styles?: StyleProps): CSSProperties {
   if (!styles) return {};
+  const out: CSSProperties = {};
+  assign(out, "display", styles.display);
+  assign(out, "flexDirection", styles.flexDirection);
+  assign(out, "justifyContent", styles.justifyContent);
+  assign(out, "alignItems", styles.alignItems);
+  assign(out, "gap", styles.gap);
+  assign(out, "width", styles.width);
+  assign(out, "minWidth", styles.minWidth);
+  assign(out, "maxWidth", styles.maxWidth);
+  assign(out, "height", styles.height);
+  assign(out, "minHeight", styles.minHeight);
+  assign(out, "maxHeight", styles.maxHeight);
+  assign(out, "color", styles.color);
+  assign(out, "background", styles.background);
+  assign(out, "backgroundImage", styles.backgroundImage);
+  assign(out, "fontSize", styles.fontSize);
+  assign(out, "fontWeight", styles.fontWeight);
+  assign(out, "fontStyle", styles.fontStyle);
+  assign(out, "lineHeight", styles.lineHeight);
+  assign(out, "letterSpacing", styles.letterSpacing);
+  assign(out, "textAlign", styles.textAlign);
+  assign(out, "textDecoration", styles.textDecoration);
+  assign(out, "textTransform", styles.textTransform);
+  assign(out, "borderWidth", styles.borderWidth);
+  assign(out, "borderStyle", styles.borderStyle);
+  assign(out, "borderColor", styles.borderColor);
+  assign(out, "borderRadius", styles.borderRadius);
+  assign(out, "boxShadow", styles.boxShadow);
+  assign(out, "opacity", styles.opacity);
+  assign(out, "overflow", styles.overflow);
+  assign(out, "position", styles.position);
+  assign(out, "top", styles.top);
+  assign(out, "right", styles.right);
+  assign(out, "bottom", styles.bottom);
+  assign(out, "left", styles.left);
+  assign(out, "zIndex", styles.zIndex);
+  assign(out, "cursor", styles.cursor);
   const rotate = styles.rotate ? `rotate(${styles.rotate})` : "";
   const scale = styles.scale ? `scale(${styles.scale})` : "";
-  const transform = [rotate, scale].filter(Boolean).join(" ") || undefined;
-  return {
-    display: styles.display || undefined,
-    flexDirection: styles.flexDirection as CSSProperties["flexDirection"],
-    justifyContent: styles.justifyContent,
-    alignItems: styles.alignItems,
-    gap: styles.gap || undefined,
-    width: styles.width || undefined,
-    minWidth: styles.minWidth || undefined,
-    maxWidth: styles.maxWidth || undefined,
-    height: styles.height || undefined,
-    minHeight: styles.minHeight || undefined,
-    maxHeight: styles.maxHeight || undefined,
-    color: styles.color || undefined,
-    background: styles.background || undefined,
-    backgroundImage: styles.backgroundImage || undefined,
-    fontSize: styles.fontSize || undefined,
-    fontWeight: styles.fontWeight || undefined,
-    fontStyle: styles.fontStyle as CSSProperties["fontStyle"],
-    lineHeight: styles.lineHeight || undefined,
-    letterSpacing: styles.letterSpacing || undefined,
-    textAlign: styles.textAlign as CSSProperties["textAlign"],
-    textDecoration: styles.textDecoration || undefined,
-    textTransform: styles.textTransform as CSSProperties["textTransform"],
-    borderWidth: styles.borderWidth || undefined,
-    borderStyle: styles.borderStyle || undefined,
-    borderColor: styles.borderColor || undefined,
-    borderRadius: styles.borderRadius || undefined,
-    boxShadow: styles.boxShadow || undefined,
-    opacity: styles.opacity || undefined,
-    overflow: styles.overflow || undefined,
-    position: styles.position as CSSProperties["position"],
-    top: styles.top || undefined,
-    right: styles.right || undefined,
-    bottom: styles.bottom || undefined,
-    left: styles.left || undefined,
-    zIndex: styles.zIndex || undefined,
-    transform,
-    filter: styles.filterBlur ? `blur(${styles.filterBlur})` : undefined,
-    backdropFilter: styles.backdropBlur ? `blur(${styles.backdropBlur})` : undefined,
-    cursor: styles.cursor || undefined,
-    ...boxToCss(styles.padding, "padding"),
-    ...boxToCss(styles.margin, "margin"),
-  };
+  const transform = [rotate, scale].filter(Boolean).join(" ");
+  assign(out, "transform", transform);
+  assign(out, "filter", styles.filterBlur ? `blur(${styles.filterBlur})` : "");
+  assign(out, "backdropFilter", styles.backdropBlur ? `blur(${styles.backdropBlur})` : "");
+  Object.assign(out, boxToCss(styles.padding, "padding"), boxToCss(styles.margin, "margin"));
+  return out;
 }
 
 export const STOCK_MEDIA = [

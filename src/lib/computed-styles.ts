@@ -1,20 +1,40 @@
 import type { StyleProps } from "@/lib/types";
 
-export function rgbToHex(input: string): string {
+export function parseCssColor(input: string): { hex: string; alpha: number } | null {
   const value = input.trim();
-  if (!value || value === "transparent" || value === "none") return "";
+  if (!value || value === "transparent" || value === "none") return { hex: "", alpha: 0 };
   if (value.startsWith("#")) {
-    if (value.length === 4) {
-      return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`.toLowerCase();
-    }
-    return value.slice(0, 7).toLowerCase();
+    const hex =
+      value.length === 4
+        ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`.toLowerCase()
+        : value.slice(0, 7).toLowerCase();
+    return { hex, alpha: 1 };
   }
-  const match = value.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-  if (!match) return "";
-  const hex = [match[1], match[2], match[3]]
+  const match = value.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i);
+  if (!match) return null;
+  const alpha = match[4] === undefined ? 1 : match[4].endsWith("%") ? Number.parseFloat(match[4]) / 100 : Number(match[4]);
+  if (alpha <= 0.01) return { hex: "", alpha: 0 };
+  const hex = `#${[match[1], match[2], match[3]]
     .map((part) => Math.round(Number(part)).toString(16).padStart(2, "0"))
-    .join("");
-  return `#${hex}`;
+    .join("")}`;
+  return { hex, alpha };
+}
+
+export function rgbToHex(input: string): string {
+  return parseCssColor(input)?.hex ?? "";
+}
+
+function opaqueFill(el: HTMLElement): string {
+  const nodes = [el, ...Array.from(el.querySelectorAll("*"))] as HTMLElement[];
+  for (const node of nodes) {
+    const parsed = parseCssColor(getComputedStyle(node).backgroundColor);
+    if (parsed?.hex) return parsed.hex;
+  }
+  return "";
+}
+
+function opaqueColor(el: HTMLElement): string {
+  return parseCssColor(getComputedStyle(el).color)?.hex ?? "";
 }
 
 export function hexToRgba(hex: string, alpha = 1) {
@@ -53,8 +73,8 @@ function mapWeight(value: string) {
 export function readComputedStyleProps(el: HTMLElement): StyleProps {
   const cs = getComputedStyle(el);
   const backgroundImage = cs.backgroundImage !== "none" ? cs.backgroundImage : "";
-  const color = rgbToHex(cs.color);
-  const background = rgbToHex(cs.backgroundColor);
+  const color = opaqueColor(el);
+  const background = opaqueFill(el);
   const borderColor = rgbToHex(cs.borderTopColor);
   return {
     display: cs.display || "",
