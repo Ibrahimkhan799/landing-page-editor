@@ -16,6 +16,15 @@ export function parseCssColor(input: string): { hex: string; alpha: number } | n
           : 1;
     return { hex, alpha: Number.isFinite(alpha) ? alpha : 1 };
   }
+  const srgb = value.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)/i);
+  if (srgb) {
+    const hex = `#${[srgb[1], srgb[2], srgb[3]]
+      .map((part) => Math.round(Number(part) * 255).toString(16).padStart(2, "0"))
+      .join("")}`;
+    const alpha =
+      srgb[4] === undefined ? 1 : srgb[4].endsWith("%") ? Number.parseFloat(srgb[4]) / 100 : Number(srgb[4]);
+    return { hex, alpha: Number.isFinite(alpha) ? alpha : 1 };
+  }
   const match = value.match(
     /rgba?\(\s*([\d.]+)%?(?:[\s,]+([\d.]+)%?)(?:[\s,]+([\d.]+)%?)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/i,
   );
