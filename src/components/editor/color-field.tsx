@@ -65,9 +65,9 @@ export function ColorPickerBody({
   const alpha = parsed && color ? parsed.alpha : readAlpha(color);
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1">
       <HexColorPicker className="color-picker !w-full" color={hex} onChange={(next) => onChange(paintValue(next, alpha))} />
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <ColorSwatch color={paintValue(hex, alpha)} className="size-4" />
         <HexColorInput
           prefixed

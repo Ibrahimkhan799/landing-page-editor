@@ -53,6 +53,15 @@ export function needsDistance(preset?: AnimationPreset) {
   return Boolean(preset && (preset.startsWith("slide") || preset === "text-slide"));
 }
 
+export function animationTracks(preset: AnimationPreset) {
+  const tracks: { id: string; label: string; color: string }[] = [{ id: "opacity", label: "Opacity", color: "#0d99ff" }];
+  if (preset.startsWith("slide") || preset === "text-slide") tracks.push({ id: "move", label: "Move", color: "#7b61ff" });
+  if (preset === "scale-in") tracks.push({ id: "scale", label: "Scale", color: "#f59e0b" });
+  if (preset.includes("blur")) tracks.push({ id: "blur", label: "Blur", color: "#0f766e" });
+  if (preset.startsWith("text")) tracks.push({ id: "text", label: "Text", color: "#e11d48" });
+  return tracks;
+}
+
 export function animationVars(anim: AnimationConfig): Record<string, string> {
   return {
     "--lp-anim-duration": `${anim.duration}s`,

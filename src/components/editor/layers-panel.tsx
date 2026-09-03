@@ -4,6 +4,7 @@ import {
   DndContext,
   PointerSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -19,7 +20,7 @@ import {
   GripVertical,
   Type,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEditor } from "@/components/editor/editor-context";
 import { elementsSlot, elementSlot, slotDefs } from "@/lib/slots";
@@ -60,7 +61,7 @@ function SortableLayer({
     >
       <button
         type="button"
-        className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-300 hover:text-zinc-500 active:cursor-grabbing"
+        className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
         {...attributes}
         {...listeners}
       >
@@ -78,6 +79,26 @@ function SortableLayer({
         <Icon className="size-3.5 shrink-0 text-zinc-400" />
         <span className="truncate">{label}</span>
       </button>
+    </div>
+  );
+}
+
+function SlotLayer({
+  sectionId,
+  slotId,
+  children,
+}: {
+  sectionId: string;
+  slotId: string;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `layer-slot-${sectionId}-${slotId}`,
+    data: { kind: "layer-slot", sectionId, slotId },
+  });
+  return (
+    <div ref={setNodeRef} className={cn("rounded-sm", isOver && "bg-[#0d99ff]/10")}>
+      {children}
     </div>
   );
 }
@@ -109,7 +130,7 @@ function SectionLayers({ section }: { section: PageSection }) {
         </button>
         <button
           type="button"
-          className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-300 hover:text-zinc-500 active:cursor-grabbing"
+          className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
           {...attributes}
           {...listeners}
         >
@@ -153,7 +174,7 @@ function SectionLayers({ section }: { section: PageSection }) {
                   : [];
             const sortable = slot.kind === "elements";
             return (
-              <div key={slot.id}>
+              <SlotLayer key={slot.id} sectionId={section.id} slotId={slot.id}>
                 <div
                   className="flex h-7 items-center rounded-sm hover:bg-zinc-50"
                   style={{ paddingLeft: 32 }}
@@ -203,7 +224,7 @@ function SectionLayers({ section }: { section: PageSection }) {
                     );
                   })
                 )}
-              </div>
+              </SlotLayer>
             );
           })
         : null}
@@ -227,12 +248,22 @@ export function LayersPanel() {
 
     if (activeData?.kind === "layer-section") {
       const from = page.sections.findIndex((section) => `layer-section-${section.id}` === active.id);
-      const to = page.sections.findIndex((section) => `layer-section-${section.id}` === over.id);
+      const overSectionId =
+        typeof over.id === "string" && over.id.startsWith("layer-section-")
+          ? over.id.replace("layer-section-", "")
+          : overData?.sectionId;
+      const to = page.sections.findIndex((section) => section.id === overSectionId);
       if (from >= 0 && to >= 0 && from !== to) moveSection(from, to);
       return;
     }
 
     if (activeData?.kind === "layer-element" && activeData.sectionId && activeData.slotId && activeData.elementId) {
+      if (overData?.kind === "layer-slot" && overData.sectionId && overData.slotId) {
+        if (overData.sectionId !== activeData.sectionId || overData.slotId !== activeData.slotId) {
+          relocateElement(activeData.sectionId, activeData.slotId, activeData.elementId, overData.sectionId, overData.slotId);
+        }
+        return;
+      }
       if (
         overData?.kind === "layer-element" &&
         overData.sectionId &&

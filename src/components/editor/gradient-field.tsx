@@ -5,13 +5,6 @@ import { ColorPickerBody, ColorSwatch } from "@/components/editor/color-field";
 import { MiniInput, SliderRow } from "@/components/editor/compact-controls";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 type Stop = { color: string; at: string };
 
@@ -91,15 +84,14 @@ export function GradientField({
       {label ? <Label className="text-[11px] text-zinc-500">{label}</Label> : null}
       <div className="h-6 rounded-[3px] ring-1 ring-black/5" style={{ backgroundImage: gradient }} />
       <div className="grid grid-cols-2 gap-1">
-        <Select value={parsed.kind} onValueChange={(kind) => update({ kind })}>
-          <SelectTrigger className="h-5 border-0 bg-zinc-100 text-[11px] shadow-none">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="linear">Linear</SelectItem>
-            <SelectItem value="radial">Radial</SelectItem>
-          </SelectContent>
-        </Select>
+        <select
+          value={parsed.kind}
+          onChange={(event) => update({ kind: event.target.value })}
+          className="h-5 rounded-[3px] border-0 bg-zinc-100 px-1.5 text-[11px] text-zinc-700 outline-none"
+        >
+          <option value="linear">Linear</option>
+          <option value="radial">Radial</option>
+        </select>
         {parsed.kind === "linear" ? (
           <MiniInput
             value={angle}
