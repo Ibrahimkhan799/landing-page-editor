@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ExternalLink, Monitor, Smartphone, Tablet, Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { EditorCanvas } from "@/components/editor/canvas";
+import { EditorDnd } from "@/components/editor/editor-dnd";
 import { useEditor } from "@/components/editor/editor-context";
 import { Inspector } from "@/components/editor/inspector";
 import { LibrarySidebar } from "@/components/editor/library-sidebar";
@@ -74,9 +75,11 @@ export function EditorShell() {
         </Button>
       </header>
       <div className="flex min-h-0 flex-1">
-        <LibrarySidebar />
-        <EditorCanvas device={device} />
-        <Inspector />
+        <EditorDnd>
+          <LibrarySidebar />
+          <EditorCanvas device={device} />
+          <Inspector />
+        </EditorDnd>
       </div>
     </div>
   );

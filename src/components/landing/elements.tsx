@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { styleToCss } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
 
@@ -47,20 +48,33 @@ export function LandingElement({
   const align = asString(p.align, "left");
   const alignClass =
     align === "center" ? "text-center mx-auto" : align === "right" ? "text-right ml-auto" : "";
+  const meta = {
+    id: element.htmlId || undefined,
+    className: element.className || undefined,
+    style: styleToCss(element.styles),
+  };
 
   switch (element.type) {
     case "heading": {
       const level = asString(p.level, "h2") as keyof typeof headingSizes;
       const Tag = (["h1", "h2", "h3", "h4"].includes(level) ? level : "h2") as "h1" | "h2" | "h3" | "h4";
       return (
-        <Tag className={cn(headingSizes[Tag], alignClass)} style={{ fontFamily: "var(--lp-font-heading)" }}>
+        <Tag
+          {...meta}
+          className={cn(headingSizes[Tag], alignClass, element.className)}
+          style={{ fontFamily: "var(--lp-font-heading)", ...styleToCss(element.styles) }}
+        >
           {asString(p.text, "Heading")}
         </Tag>
       );
     }
     case "paragraph":
       return (
-        <p className={cn("max-w-2xl text-base leading-7", alignClass)} style={{ color: "var(--lp-muted-fg)" }}>
+        <p
+          {...meta}
+          className={cn("max-w-2xl text-base leading-7", alignClass, element.className)}
+          style={{ color: "var(--lp-muted-fg)", ...styleToCss(element.styles) }}
+        >
           {asString(p.text, "")}
         </p>
       );
@@ -71,9 +85,10 @@ export function LandingElement({
         "font-medium",
         size === "sm" && "h-8 px-3 text-xs",
         size === "lg" && "h-12 px-6 text-base",
+        element.className,
       );
-      const style =
-        variant === "primary"
+      const style = {
+        ...(variant === "primary"
           ? { backgroundColor: "var(--lp-primary)", color: "var(--lp-primary-fg)", borderRadius: "var(--lp-radius)" }
           : variant === "secondary"
             ? { backgroundColor: "var(--lp-secondary)", color: "var(--lp-secondary-fg)", borderRadius: "var(--lp-radius)" }
@@ -82,42 +97,57 @@ export function LandingElement({
                 color: "var(--lp-fg)",
                 border: "1px solid var(--lp-border)",
                 borderRadius: "var(--lp-radius)",
-              };
+              }),
+        ...styleToCss(element.styles),
+      };
       if (!interactive) {
         return (
-          <span className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
+          <span id={element.htmlId || undefined} className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
             {asString(p.label, "Button")}
           </span>
         );
       }
       return (
-        <a href={asString(p.href, "#")} className={cn(className, "inline-flex items-center justify-center px-4 py-2")} style={style}>
+        <a
+          id={element.htmlId || undefined}
+          href={asString(p.href, "#")}
+          className={cn(className, "inline-flex items-center justify-center px-4 py-2")}
+          style={style}
+        >
           {asString(p.label, "Button")}
         </a>
       );
     }
     case "input":
       return (
-        <div className="grid w-full max-w-md gap-2">
+        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Label")}</Label>
           <Input
+            id={element.htmlId || undefined}
+            className={element.className}
             type={asString(p.inputType, "text")}
             placeholder={asString(p.placeholder)}
             required={asBool(p.required)}
             disabled={!interactive}
+            readOnly={!interactive}
             style={{ borderRadius: "var(--lp-radius)" }}
+            tabIndex={interactive ? 0 : -1}
           />
         </div>
       );
     case "textarea":
       return (
-        <div className="grid w-full max-w-md gap-2">
+        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Message")}</Label>
           <Textarea
+            id={element.htmlId || undefined}
+            className={element.className}
             placeholder={asString(p.placeholder)}
             rows={asNumber(p.rows, 4)}
             disabled={!interactive}
+            readOnly={!interactive}
             style={{ borderRadius: "var(--lp-radius)" }}
+            tabIndex={interactive ? 0 : -1}
           />
         </div>
       );
@@ -127,10 +157,10 @@ export function LandingElement({
         .map((line) => line.trim())
         .filter(Boolean);
       return (
-        <div className="grid w-full max-w-md gap-2">
+        <div className="grid w-full max-w-md gap-2" style={styleToCss(element.styles)}>
           <Label>{asString(p.label, "Select")}</Label>
           <Select disabled={!interactive}>
-            <SelectTrigger style={{ borderRadius: "var(--lp-radius)" }}>
+            <SelectTrigger id={element.htmlId || undefined} className={element.className} style={{ borderRadius: "var(--lp-radius)" }}>
               <SelectValue placeholder={asString(p.placeholder, "Choose")} />
             </SelectTrigger>
             <SelectContent>
@@ -146,7 +176,7 @@ export function LandingElement({
     }
     case "checkbox":
       return (
-        <label className="flex items-center gap-2 text-sm">
+        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} style={styleToCss(element.styles)}>
           <Checkbox disabled={!interactive} defaultChecked={asBool(p.checked)} />
           {asString(p.label, "Checkbox")}
         </label>
@@ -155,13 +185,16 @@ export function LandingElement({
       const variant = asString(p.variant, "primary");
       return (
         <Badge
-          style={
-            variant === "primary"
+          id={element.htmlId || undefined}
+          className={element.className}
+          style={{
+            ...(variant === "primary"
               ? { backgroundColor: "var(--lp-primary)", color: "var(--lp-primary-fg)", borderColor: "transparent" }
               : variant === "accent"
                 ? { backgroundColor: "var(--lp-accent)", color: "var(--lp-accent-fg)", borderColor: "transparent" }
-                : { backgroundColor: "var(--lp-muted)", color: "var(--lp-fg)" }
-          }
+                : { backgroundColor: "var(--lp-muted)", color: "var(--lp-fg)" }),
+            ...styleToCss(element.styles),
+          }}
         >
           {asString(p.text, "Badge")}
         </Badge>
@@ -171,16 +204,34 @@ export function LandingElement({
       return (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          id={element.htmlId || undefined}
           src={asString(p.src)}
           alt={asString(p.alt, "")}
-          className={cn("w-full object-cover", asBool(p.rounded, true) && "rounded-[var(--lp-radius)]")}
+          className={cn("w-full object-cover", asBool(p.rounded, true) && "rounded-[var(--lp-radius)]", element.className)}
+          style={styleToCss(element.styles)}
+        />
+      );
+    case "video":
+      return (
+        <video
+          id={element.htmlId || undefined}
+          src={asString(p.src)}
+          className={cn("w-full rounded-[var(--lp-radius)]", element.className)}
+          style={styleToCss(element.styles)}
+          controls={interactive}
+          muted
+          playsInline
         />
       );
     case "separator":
-      return <Separator className={asString(p.spacing) === "lg" ? "my-8" : "my-4"} />;
+      return <Separator id={element.htmlId || undefined} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} />;
     case "card":
       return (
-        <Card className="max-w-sm" style={{ borderRadius: "var(--lp-radius)", background: "var(--lp-card)" }}>
+        <Card
+          id={element.htmlId || undefined}
+          className={cn("max-w-sm", element.className)}
+          style={{ borderRadius: "var(--lp-radius)", background: "var(--lp-card)", ...styleToCss(element.styles) }}
+        >
           <CardHeader>
             <CardTitle style={{ fontFamily: "var(--lp-font-heading)" }}>{asString(p.title)}</CardTitle>
           </CardHeader>
@@ -206,7 +257,7 @@ export function ElementStack({
 }) {
   if (!elements.length) return null;
   return (
-    <div className="mt-8 flex flex-col items-start gap-4">
+    <div className="mt-6 flex flex-col items-start gap-4">
       {elements.map((element) => (
         <LandingElement key={element.id} element={element} interactive={interactive} />
       ))}

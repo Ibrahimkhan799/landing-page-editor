@@ -12,10 +12,14 @@ export async function POST(request: Request) {
   if (!body.section) {
     return NextResponse.json({ error: "Section required" }, { status: 400 });
   }
-  const section = {
+  const section: Omit<PageSection, "id"> = {
     type: body.section.type,
     name: body.section.name,
     props: body.section.props,
+    slots: body.section.slots,
+    className: body.section.className,
+    htmlId: body.section.htmlId,
+    styles: body.section.styles,
     elements: body.section.elements,
   };
   const saved = await saveComponent({

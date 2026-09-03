@@ -1,6 +1,8 @@
 "use client";
 
+import { ColorField } from "@/components/editor/color-field";
 import { useEditor } from "@/components/editor/editor-context";
+import { MediaPicker } from "@/components/editor/media-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -29,14 +31,6 @@ export function ThemePanel() {
   const { page, updateTheme } = useEditor();
   const theme = page.theme;
 
-  function readLogo(file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateTheme({ logo: typeof reader.result === "string" ? reader.result : null });
-    };
-    reader.readAsDataURL(file);
-  }
-
   return (
     <ScrollArea className="h-full">
       <div className="space-y-5 p-4">
@@ -50,43 +44,19 @@ export function ThemePanel() {
           <Label className="text-xs text-muted-foreground">Brand name</Label>
           <Input value={theme.brandName} onChange={(event) => updateTheme({ brandName: event.target.value })} />
         </div>
-        <div className="grid gap-1.5">
-          <Label className="text-xs text-muted-foreground">Logo</Label>
-          <Input
-            type="file"
-            accept="image/*"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) readLogo(file);
-            }}
-          />
-          {theme.logo ? (
-            <div className="flex items-center justify-between rounded-md border p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={theme.logo} alt="Logo preview" className="h-8 w-auto" />
-              <button type="button" className="text-xs text-muted-foreground" onClick={() => updateTheme({ logo: null })}>
-                Remove
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <MediaPicker
+          label="Logo"
+          value={theme.logo ?? ""}
+          onChange={(src) => updateTheme({ logo: src || null })}
+        />
         <div className="grid gap-3">
           {colorFields.map(([key, label]) => (
-            <div key={key} className="flex items-center gap-2">
-              <input
-                type="color"
-                className="h-9 w-9 cursor-pointer rounded border bg-transparent p-0"
-                value={theme.colors[key]}
-                onChange={(event) => updateTheme({ colors: { [key]: event.target.value } })}
-              />
-              <div className="min-w-0 flex-1">
-                <Label className="text-xs text-muted-foreground">{label}</Label>
-                <Input
-                  value={theme.colors[key]}
-                  onChange={(event) => updateTheme({ colors: { [key]: event.target.value } })}
-                />
-              </div>
-            </div>
+            <ColorField
+              key={key}
+              label={label}
+              value={theme.colors[key]}
+              onChange={(value) => updateTheme({ colors: { [key]: value } })}
+            />
           ))}
         </div>
         <div className="grid gap-1.5">

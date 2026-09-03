@@ -1,7 +1,6 @@
 "use client";
 
 import { arrayMove } from "@dnd-kit/sortable";
-import { nanoid } from "nanoid";
 import {
   createContext,
   useCallback,
@@ -12,17 +11,40 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createElement, createSection } from "@/lib/defaults";
+import { cloneSection, createElement, createSection } from "@/lib/defaults";
+import { migratePage } from "@/lib/migrate";
+import { defaultElementsSlot, findElement, slotDefs } from "@/lib/slots";
 import type {
   ElementType,
   LandingPage,
+  NodeMeta,
   PageElement,
   PageSection,
   SavedComponent,
   SectionType,
   Selection,
+  SlotValue,
   ThemeConfig,
 } from "@/lib/types";
+
+function mapSection(page: LandingPage, sectionId: string, updater: (section: PageSection) => PageSection) {
+  return {
+    ...page,
+    sections: page.sections.map((section) => (section.id === sectionId ? updater(section) : section)),
+  };
+}
+
+function mapElement(section: PageSection, elementId: string, updater: (element: PageElement) => PageElement) {
+  const slots = { ...section.slots };
+  for (const [key, value] of Object.entries(slots)) {
+    if (Array.isArray(value)) {
+      slots[key] = value.map((element) => (element.id === elementId ? updater(element) : element));
+    } else if (value && typeof value === "object" && "id" in value && value.id === elementId) {
+      slots[key] = updater(value as PageElement);
+    }
+  }
+  return { ...section, slots };
+}
 
 type EditorContextValue = {
   page: LandingPage;
@@ -39,13 +61,16 @@ type EditorContextValue = {
   moveSection: (from: number, to: number) => void;
   updateSection: (sectionId: string, patch: Partial<PageSection>) => void;
   updateSectionProp: (sectionId: string, key: string, value: unknown) => void;
-  addElement: (sectionId: string, type: ElementType) => void;
+  updateSlot: (sectionId: string, slotId: string, value: SlotValue) => void;
+  addElement: (sectionId: string, type: ElementType, slotId?: string) => void;
   removeElement: (sectionId: string, elementId: string) => void;
-  moveElement: (sectionId: string, from: number, to: number) => void;
+  moveElement: (sectionId: string, slotId: string, from: number, to: number) => void;
   updateElement: (sectionId: string, elementId: string, patch: Partial<PageElement>) => void;
   updateElementProp: (sectionId: string, elementId: string, key: string, value: unknown) => void;
+  updateElementMeta: (sectionId: string, elementId: string, patch: NodeMeta) => void;
   selectedSection: PageSection | null;
   selectedElement: PageElement | null;
+  selectedSlotId: string | null;
   save: () => Promise<void>;
 };
 
@@ -58,7 +83,7 @@ export function EditorProvider({
   initialPage: LandingPage;
   children: ReactNode;
 }) {
-  const [page, setPage] = useState(initialPage);
+  const [page, setPage] = useState(() => migratePage(initialPage));
   const pageRef = useRef(page);
   useEffect(() => {
     pageRef.current = page;
@@ -73,9 +98,7 @@ export function EditorProvider({
   }, []);
 
   const updatePage = useCallback(
-    (patch: Partial<LandingPage>) => {
-      mutate((current) => ({ ...current, ...patch }));
-    },
+    (patch: Partial<LandingPage>) => mutate((current) => ({ ...current, ...patch })),
     [mutate],
   );
 
@@ -86,14 +109,8 @@ export function EditorProvider({
         theme: {
           ...current.theme,
           ...patch,
-          colors: {
-            ...current.theme.colors,
-            ...("colors" in patch ? patch.colors : {}),
-          },
-          fonts: {
-            ...current.theme.fonts,
-            ...("fonts" in patch ? patch.fonts : {}),
-          },
+          colors: { ...current.theme.colors, ...("colors" in patch ? patch.colors : {}) },
+          fonts: { ...current.theme.fonts, ...("fonts" in patch ? patch.fonts : {}) },
         },
       }));
     },
@@ -105,8 +122,7 @@ export function EditorProvider({
       const section = createSection(type);
       mutate((current) => {
         const sections = [...current.sections];
-        const index = atIndex ?? sections.length;
-        sections.splice(index, 0, section);
+        sections.splice(atIndex ?? sections.length, 0, section);
         return { ...current, sections };
       });
       setSelection({ kind: "section", sectionId: section.id });
@@ -116,11 +132,8 @@ export function EditorProvider({
 
   const insertSavedSection = useCallback(
     (component: SavedComponent) => {
-      const section: PageSection = {
-        ...component.section,
-        id: nanoid(10),
-        elements: component.section.elements.map((element) => ({ ...element, id: nanoid(10) })),
-      };
+      const section = cloneSection({ ...component.section, id: "tmp" });
+      section.name = component.name;
       mutate((current) => ({ ...current, sections: [...current.sections, section] }));
       setSelection({ kind: "section", sectionId: section.id });
     },
@@ -132,13 +145,7 @@ export function EditorProvider({
       mutate((current) => {
         const index = current.sections.findIndex((section) => section.id === sectionId);
         if (index < 0) return current;
-        const source = current.sections[index];
-        const copy: PageSection = {
-          ...source,
-          id: nanoid(10),
-          name: `${source.name} copy`,
-          elements: source.elements.map((element) => ({ ...element, id: nanoid(10) })),
-        };
+        const copy = cloneSection(current.sections[index]);
         const sections = [...current.sections];
         sections.splice(index + 1, 0, copy);
         return { ...current, sections };
@@ -149,10 +156,7 @@ export function EditorProvider({
 
   const removeSection = useCallback(
     (sectionId: string) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.filter((section) => section.id !== sectionId),
-      }));
+      mutate((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== sectionId) }));
       setSelection({ kind: "page" });
     },
     [mutate],
@@ -160,121 +164,139 @@ export function EditorProvider({
 
   const moveSection = useCallback(
     (from: number, to: number) => {
-      mutate((current) => ({
-        ...current,
-        sections: arrayMove(current.sections, from, to),
-      }));
+      mutate((current) => ({ ...current, sections: arrayMove(current.sections, from, to) }));
     },
     [mutate],
   );
 
   const updateSection = useCallback(
     (sectionId: string, patch: Partial<PageSection>) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId ? { ...section, ...patch } : section,
-        ),
-      }));
+      mutate((current) => mapSection(current, sectionId, (section) => ({ ...section, ...patch })));
     },
     [mutate],
   );
 
   const updateSectionProp = useCallback(
     (sectionId: string, key: string, value: unknown) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, props: { ...section.props, [key]: value } }
-            : section,
-        ),
-      }));
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => ({ ...section, props: { ...section.props, [key]: value } })),
+      );
+    },
+    [mutate],
+  );
+
+  const updateSlot = useCallback(
+    (sectionId: string, slotId: string, value: SlotValue) => {
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => ({ ...section, slots: { ...section.slots, [slotId]: value } })),
+      );
     },
     [mutate],
   );
 
   const addElement = useCallback(
-    (sectionId: string, type: ElementType) => {
+    (sectionId: string, type: ElementType, slotId?: string) => {
       const element = createElement(type);
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, elements: [...section.elements, element] }
-            : section,
-        ),
-      }));
-      setSelection({ kind: "element", sectionId, elementId: element.id });
+      let targetSlot = slotId;
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => {
+          const defs = slotDefs(section.type);
+          const preferred =
+            targetSlot ??
+            (selection.kind === "slot" && selection.sectionId === sectionId ? selection.slotId : undefined) ??
+            (selection.kind === "element" && selection.sectionId === sectionId ? selection.slotId : undefined) ??
+            defs.find((slot) => slot.kind === "element" && !(section.slots ?? {})[slot.id])?.id ??
+            defaultElementsSlot(section);
+          targetSlot = preferred;
+          const def = defs.find((slot) => slot.id === preferred);
+          const accepted =
+            !def?.accept?.length || def.accept.includes(type)
+              ? preferred
+              : defs.find(
+                  (slot) =>
+                    (slot.kind === "element" || slot.kind === "elements") &&
+                    (!slot.accept?.length || slot.accept.includes(type)),
+                )?.id ?? preferred;
+          targetSlot = accepted;
+          const targetDef = defs.find((slot) => slot.id === accepted);
+          const slots = { ...section.slots };
+          if (targetDef?.kind === "element") {
+            slots[accepted] = element;
+          } else {
+            const currentValue = Array.isArray(slots[accepted]) ? (slots[accepted] as PageElement[]) : [];
+            slots[accepted] = [...currentValue, element];
+          }
+          return { ...section, slots };
+        }),
+      );
+      setSelection({ kind: "element", sectionId, slotId: targetSlot ?? "extra", elementId: element.id });
     },
-    [mutate],
+    [mutate, selection],
   );
 
   const removeElement = useCallback(
     (sectionId: string, elementId: string) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, elements: section.elements.filter((element) => element.id !== elementId) }
-            : section,
-        ),
-      }));
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => {
+          const slots = { ...section.slots };
+          for (const [key, value] of Object.entries(slots)) {
+            if (Array.isArray(value)) slots[key] = value.filter((element) => element.id !== elementId);
+            else if (value && typeof value === "object" && "id" in value && value.id === elementId) slots[key] = null;
+          }
+          return { ...section, slots };
+        }),
+      );
       setSelection({ kind: "section", sectionId });
     },
     [mutate],
   );
 
   const moveElement = useCallback(
-    (sectionId: string, from: number, to: number) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, elements: arrayMove(section.elements, from, to) }
-            : section,
-        ),
-      }));
+    (sectionId: string, slotId: string, from: number, to: number) => {
+      mutate((current) =>
+        mapSection(current, sectionId, (section) => {
+          const value = section.slots?.[slotId];
+          if (!Array.isArray(value)) return section;
+          return { ...section, slots: { ...section.slots, [slotId]: arrayMove(value, from, to) } };
+        }),
+      );
     },
     [mutate],
   );
 
   const updateElement = useCallback(
     (sectionId: string, elementId: string, patch: Partial<PageElement>) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? {
-                ...section,
-                elements: section.elements.map((element) =>
-                  element.id === elementId ? { ...element, ...patch } : element,
-                ),
-              }
-            : section,
+      mutate((current) =>
+        mapSection(current, sectionId, (section) =>
+          mapElement(section, elementId, (element) => ({ ...element, ...patch })),
         ),
-      }));
+      );
     },
     [mutate],
   );
 
   const updateElementProp = useCallback(
     (sectionId: string, elementId: string, key: string, value: unknown) => {
-      mutate((current) => ({
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? {
-                ...section,
-                elements: section.elements.map((element) =>
-                  element.id === elementId
-                    ? { ...element, props: { ...element.props, [key]: value } }
-                    : element,
-                ),
-              }
-            : section,
+      mutate((current) =>
+        mapSection(current, sectionId, (section) =>
+          mapElement(section, elementId, (element) => ({ ...element, props: { ...element.props, [key]: value } })),
         ),
-      }));
+      );
+    },
+    [mutate],
+  );
+
+  const updateElementMeta = useCallback(
+    (sectionId: string, elementId: string, patch: NodeMeta) => {
+      mutate((current) =>
+        mapSection(current, sectionId, (section) =>
+          mapElement(section, elementId, (element) => ({
+            ...element,
+            ...patch,
+            styles: patch.styles ?? element.styles,
+          })),
+        ),
+      );
     },
     [mutate],
   );
@@ -289,8 +311,7 @@ export function EditorProvider({
         body: JSON.stringify(snapshot),
       });
       if (!response.ok) throw new Error("Save failed");
-      const saved = (await response.json()) as LandingPage;
-      setPage(saved);
+      setPage(migratePage(await response.json()));
       setDirty(false);
     } finally {
       setSaving(false);
@@ -302,9 +323,11 @@ export function EditorProvider({
     return page.sections.find((section) => section.id === selection.sectionId) ?? null;
   }, [page.sections, selection]);
 
+  const selectedSlotId = selection.kind === "slot" || selection.kind === "element" ? selection.slotId : null;
+
   const selectedElement = useMemo(() => {
     if (selection.kind !== "element" || !selectedSection) return null;
-    return selectedSection.elements.find((element) => element.id === selection.elementId) ?? null;
+    return findElement(selectedSection, selection.elementId)?.element ?? null;
   }, [selectedSection, selection]);
 
   const value = useMemo(
@@ -323,13 +346,16 @@ export function EditorProvider({
       moveSection,
       updateSection,
       updateSectionProp,
+      updateSlot,
       addElement,
       removeElement,
       moveElement,
       updateElement,
       updateElementProp,
+      updateElementMeta,
       selectedSection,
       selectedElement,
+      selectedSlotId,
       save,
     }),
     [
@@ -346,13 +372,16 @@ export function EditorProvider({
       moveSection,
       updateSection,
       updateSectionProp,
+      updateSlot,
       addElement,
       removeElement,
       moveElement,
       updateElement,
       updateElementProp,
+      updateElementMeta,
       selectedSection,
       selectedElement,
+      selectedSlotId,
       save,
     ],
   );
