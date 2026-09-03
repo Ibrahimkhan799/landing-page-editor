@@ -332,17 +332,17 @@ export function NodeMetaEditor({
 }) {
   return (
     <div className="space-y-4">
-      <IdentityFields
-        className={node.className}
-        htmlId={node.htmlId}
-        onClassName={(className) => onChange({ className })}
-        onHtmlId={(htmlId) => onChange({ htmlId })}
-      />
       <StyleEditor
         styles={node.styles}
         computed={computed}
         onChange={(styles) => onChange({ styles })}
         swatches={swatches}
+      />
+      <IdentityFields
+        className={node.className}
+        htmlId={node.htmlId}
+        onClassName={(className) => onChange({ className })}
+        onHtmlId={(htmlId) => onChange({ htmlId })}
       />
     </div>
   );

@@ -97,15 +97,7 @@ export function FillPopover({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setMode(item.id);
-                  if (item.id === "gradient" && !styles.backgroundImage?.includes("gradient")) {
-                    onChange({
-                      backgroundImage: "linear-gradient(135deg, #0f766e, #f59e0b)",
-                      background: "",
-                    });
-                  }
-                }}
+                onClick={() => setMode(item.id)}
                 className={cn(
                   "h-7 rounded text-[11px] font-medium",
                   currentMode === item.id ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-100",

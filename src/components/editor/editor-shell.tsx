@@ -83,8 +83,9 @@ export function EditorShell() {
       }
       if (meta && event.key.toLowerCase() === "v") {
         event.preventDefault();
-        pasteClipboard(event.shiftKey);
-        toast.message(event.shiftKey ? "Pasted in place" : "Pasted");
+        void pasteClipboard(event.shiftKey).then((ok) => {
+          if (ok) toast.message(event.shiftKey ? "Pasted in place" : "Pasted");
+        });
         return;
       }
       if (meta && event.key.toLowerCase() === "a" && selectedElement && selectedSection) {

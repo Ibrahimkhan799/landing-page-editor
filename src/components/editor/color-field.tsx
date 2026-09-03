@@ -85,7 +85,7 @@ export function ColorPickerBody({
       </div>
       {swatches?.length ? (
         <div className="flex flex-wrap gap-1.5">
-          {swatches.map((swatch) => (
+          {[...new Set(swatches)].map((swatch) => (
             <button
               key={swatch}
               type="button"

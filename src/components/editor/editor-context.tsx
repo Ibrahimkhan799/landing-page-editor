@@ -137,7 +137,7 @@ type EditorContextValue = {
   updateElementMeta: (sectionId: string, elementId: string, patch: NodeMeta) => void;
   updateSelectedStyles: (styles: StyleProps) => void;
   copySelection: () => void;
-  pasteClipboard: (inPlace?: boolean) => void;
+  pasteClipboard: (inPlace?: boolean) => Promise<boolean>;
   alignSelection: (kind: AlignKind) => void;
   selectSlotSiblings: (sectionId: string, slotId: string) => void;
   replaceSection: (sectionId: string, next: PageSection) => void;
@@ -608,81 +608,80 @@ export function EditorProvider({
   }, []);
 
   const pasteClipboard = useCallback(
-    (inPlace = false) => {
-      void (async () => {
-        const payload = await readClipboard();
-        if (!payload) return;
-        const currentSelection = selectionRef.current;
-        if (payload.kind === "section") {
-          const copy = cloneSection(payload.section, { name: payload.section.name });
-          copy.componentId = payload.section.componentId;
-          mutate((current) => {
-            const sections = [...current.sections];
-            const selectedId =
-              currentSelection.kind === "page"
-                ? null
-                : currentSelection.kind === "elements"
-                  ? currentSelection.items[0]?.sectionId
-                  : currentSelection.sectionId;
-            const index = selectedId ? sections.findIndex((section) => section.id === selectedId) : -1;
-            sections.splice(index >= 0 ? index + 1 : sections.length, 0, copy);
-            return { ...current, sections };
-          });
-          setSelection({ kind: "section", sectionId: copy.id });
-          return;
-        }
-        const elements = payload.kind === "element" ? [payload.element] : payload.elements;
-        const origin = payload.origin;
-        let nextSelection: Selection | null = null;
+    async (inPlace = false) => {
+      const payload = await readClipboard();
+      if (!payload) return false;
+      const currentSelection = selectionRef.current;
+      if (payload.kind === "section") {
+        const copy = cloneSection(payload.section, { name: payload.section.name });
+        copy.componentId = payload.section.componentId;
         mutate((current) => {
-          let targetSectionId = origin.sectionId;
-          let targetSlotId = origin.slotId;
-          let index: number | undefined = origin.index;
-          if (!inPlace) {
-            if (currentSelection.kind === "element") {
-              targetSectionId = currentSelection.sectionId;
-              targetSlotId = currentSelection.slotId;
-              const section = current.sections.find((item) => item.id === targetSectionId);
-              index = section ? elementIndex(section, targetSlotId, currentSelection.elementId) + 1 : 0;
-            } else if (currentSelection.kind === "slot") {
-              targetSectionId = currentSelection.sectionId;
-              targetSlotId = currentSelection.slotId;
-              index = undefined;
-            } else if (currentSelection.kind === "section") {
-              const section = current.sections.find((item) => item.id === currentSelection.sectionId);
-              targetSectionId = currentSelection.sectionId;
-              targetSlotId = section ? defaultElementsSlot(section) : origin.slotId;
-              index = undefined;
-            }
-          }
-          let lastId = "";
-          const next = {
-            ...current,
-            sections: current.sections.map((section) => {
-              if (section.id !== targetSectionId) return section;
-              let updated = section;
-              let cursor = index;
-              for (const element of elements) {
-                const copy = cloneElementNode(element);
-                lastId = copy.id;
-                updated = insertIntoSlot(updated, targetSlotId, copy, cursor);
-                if (typeof cursor === "number") cursor += 1;
-              }
-              return updated;
-            }),
-          };
-          if (lastId) {
-            nextSelection = {
-              kind: "element",
-              sectionId: targetSectionId,
-              slotId: targetSlotId,
-              elementId: lastId,
-            };
-          }
-          return next;
+          const sections = [...current.sections];
+          const selectedId =
+            currentSelection.kind === "page"
+              ? null
+              : currentSelection.kind === "elements"
+                ? currentSelection.items[0]?.sectionId
+                : currentSelection.sectionId;
+          const index = selectedId ? sections.findIndex((section) => section.id === selectedId) : -1;
+          sections.splice(index >= 0 ? index + 1 : sections.length, 0, copy);
+          return { ...current, sections };
         });
-        if (nextSelection) setSelection(nextSelection);
-      })();
+        setSelection({ kind: "section", sectionId: copy.id });
+        return true;
+      }
+      const elements = payload.kind === "element" ? [payload.element] : payload.elements;
+      const origin = payload.origin;
+      let nextSelection: Selection | null = null;
+      mutate((current) => {
+        let targetSectionId = origin.sectionId;
+        let targetSlotId = origin.slotId;
+        let index: number | undefined = origin.index;
+        if (!inPlace) {
+          if (currentSelection.kind === "element") {
+            targetSectionId = currentSelection.sectionId;
+            targetSlotId = currentSelection.slotId;
+            const section = current.sections.find((item) => item.id === targetSectionId);
+            index = section ? elementIndex(section, targetSlotId, currentSelection.elementId) + 1 : 0;
+          } else if (currentSelection.kind === "slot") {
+            targetSectionId = currentSelection.sectionId;
+            targetSlotId = currentSelection.slotId;
+            index = undefined;
+          } else if (currentSelection.kind === "section") {
+            const section = current.sections.find((item) => item.id === currentSelection.sectionId);
+            targetSectionId = currentSelection.sectionId;
+            targetSlotId = section ? defaultElementsSlot(section) : origin.slotId;
+            index = undefined;
+          }
+        }
+        let lastId = "";
+        const next = {
+          ...current,
+          sections: current.sections.map((section) => {
+            if (section.id !== targetSectionId) return section;
+            let updated = section;
+            let cursor = index;
+            for (const element of elements) {
+              const copy = cloneElementNode(element);
+              lastId = copy.id;
+              updated = insertIntoSlot(updated, targetSlotId, copy, cursor);
+              if (typeof cursor === "number") cursor += 1;
+            }
+            return updated;
+          }),
+        };
+        if (lastId) {
+          nextSelection = {
+            kind: "element",
+            sectionId: targetSectionId,
+            slotId: targetSlotId,
+            elementId: lastId,
+          };
+        }
+        return next;
+      });
+      if (nextSelection) setSelection(nextSelection);
+      return true;
     },
     [mutate, readClipboard],
   );
