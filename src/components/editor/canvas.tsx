@@ -189,7 +189,7 @@ function CanvasSizeBadge() {
   if (!nodeId || !box.width) return null;
   return (
     <div
-      data-editor-chrome
+      data-editor-size
       className="pointer-events-none absolute bottom-3 right-3 z-30 font-mono text-[10px] text-zinc-500"
     >
       {box.width} × {box.height}
