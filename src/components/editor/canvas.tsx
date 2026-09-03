@@ -22,6 +22,7 @@ function Overlay({
   onSelect,
   onDuplicate,
   onRemove,
+  inactive,
   data,
   children,
 }: {
@@ -32,6 +33,7 @@ function Overlay({
   onSelect: () => void;
   onDuplicate?: () => void;
   onRemove?: () => void;
+  inactive?: boolean;
   data: Record<string, unknown>;
   children: ReactNode;
 }) {
@@ -72,6 +74,8 @@ function Overlay({
             ? kind === "section"
               ? "border-2 border-teal-600"
               : "border-2 border-amber-500"
+            : inactive
+              ? "border border-transparent"
             : kind === "section"
               ? "border border-transparent group-hover/overlay:border-teal-400/80"
               : "border border-transparent group-hover/overlay:border-amber-400/80",
@@ -81,7 +85,7 @@ function Overlay({
         className={cn(
           "absolute left-2 top-2 z-20 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white",
           kind === "section" ? "bg-teal-700" : "bg-amber-500",
-          selected ? "opacity-100" : "pointer-events-none opacity-0 group-hover/overlay:opacity-100",
+          selected ? "opacity-100" : inactive ? "opacity-0" : "pointer-events-none opacity-0 group-hover/overlay:opacity-100",
         )}
       >
         {label}
@@ -89,7 +93,7 @@ function Overlay({
       <div
         className={cn(
           "absolute right-2 top-2 z-20 flex items-center gap-1 rounded-md border bg-white/95 p-0.5 shadow-sm",
-          selected ? "opacity-100" : "opacity-0 group-hover/overlay:opacity-100",
+          selected ? "opacity-100" : inactive ? "opacity-0" : "opacity-0 group-hover/overlay:opacity-100",
         )}
       >
         <button
@@ -185,6 +189,7 @@ export function EditorCanvas({ device }: { device: "desktop" | "tablet" | "mobil
                     kind="section"
                     label={`${index + 1}. ${section.name}`}
                     selected={sectionSelected}
+                    inactive={selection.kind === "element" && selection.sectionId === section.id}
                     data={{ sectionId: section.id }}
                     onSelect={() => setSelection({ kind: "section", sectionId: section.id })}
                     onDuplicate={() => duplicateSection(section.id)}

@@ -88,7 +88,7 @@ export function readComputedStyleProps(el: HTMLElement): StyleProps {
     fontStyle: cs.fontStyle !== "normal" ? cs.fontStyle : "",
     lineHeight: cs.lineHeight,
     letterSpacing: omitAuto(cs.letterSpacing),
-    textAlign: cs.textAlign,
+    textAlign: cs.textAlign === "start" ? "left" : cs.textAlign === "end" ? "right" : cs.textAlign,
     textDecoration: cs.textDecorationLine !== "none" ? cs.textDecorationLine : "",
     textTransform: cs.textTransform !== "none" ? cs.textTransform : "",
     borderWidth: cs.borderTopWidth,
