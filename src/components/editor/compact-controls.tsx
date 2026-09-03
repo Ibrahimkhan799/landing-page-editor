@@ -8,7 +8,7 @@ export function MiniInput({
   onChange,
   suffix,
   className,
-  width = "w-9",
+  width = "w-11",
 }: {
   value: string | number;
   onChange: (value: string) => void;
@@ -17,14 +17,15 @@ export function MiniInput({
   width?: string;
 }) {
   return (
-    <span className={cn("inline-flex h-5 items-center rounded-[3px] bg-zinc-100 px-1", width, className)}>
+    <label className={cn("inline-flex h-5 shrink-0 items-center gap-0.5", width, className)}>
       <input
+        data-editor-mini
         value={String(value)}
         onChange={(event) => onChange(event.target.value)}
-        className="h-5 min-w-0 flex-1 border-0 bg-transparent p-0 text-right font-mono text-[10px] text-zinc-700 outline-none"
+        className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1 text-right font-mono text-[10px] leading-none text-zinc-700 outline-none"
       />
-      {suffix ? <span className="pl-0.5 font-mono text-[9px] text-zinc-400">{suffix}</span> : null}
-    </span>
+      {suffix ? <span className="shrink-0 font-mono text-[9px] leading-none text-zinc-400">{suffix}</span> : null}
+    </label>
   );
 }
 
@@ -46,9 +47,11 @@ export function SliderRow({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      {label ? <span className="w-12 shrink-0 text-[10px] uppercase tracking-wide text-zinc-400">{label}</span> : null}
-      <Slider min={min} max={max} step={step} value={[value]} onValueChange={([next]) => onChange(next ?? min)} />
+    <div className="flex min-w-0 items-center gap-1.5">
+      {label ? <span className="w-10 shrink-0 text-[10px] uppercase tracking-wide text-zinc-400">{label}</span> : null}
+      <div className="min-w-0 flex-1">
+        <Slider min={min} max={max} step={step} value={[value]} onValueChange={([next]) => onChange(next ?? min)} />
+      </div>
       <MiniInput
         value={Number.isInteger(step) && step >= 1 ? Math.round(value) : Number(value.toFixed(2))}
         suffix={suffix}

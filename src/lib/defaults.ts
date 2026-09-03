@@ -54,6 +54,7 @@ export function createElement(
     className: "",
     htmlId: "",
     styles: {},
+    children: type === "frame" ? [] : undefined,
   };
 }
 
@@ -115,6 +116,7 @@ export function cloneElementNode(element: PageElement): PageElement {
     id: nanoid(10),
     props: { ...element.props },
     styles: cloneStyleProps(element.styles),
+    children: element.children?.map(cloneElementNode),
   };
 }
 

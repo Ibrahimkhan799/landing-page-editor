@@ -15,13 +15,14 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
+import { FrameDropZone } from "@/components/editor/frame-drop-zone";
 import { useEditor } from "@/components/editor/editor-context";
 import { AnimateHost, AnimationStyles } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
-import { elementsSlot, slotDefs } from "@/lib/slots";
+import { elementsSlot, frameSlotId, slotDefs } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
@@ -309,27 +310,37 @@ export function EditorCanvas() {
                           section={section}
                           theme={page.theme}
                           interactive={false}
-                          renderElement={(element: PageElement, slotId: string) => (
-                            <Overlay
-                              id={element.id}
-                              kind="element"
-                              label={element.type}
-                              selected={selectedRefs.some((ref) => ref.elementId === element.id)}
-                              data={{ sectionId: section.id, slotId, elementId: element.id }}
-                              onSelect={(event) =>
-                                toggleSelectElement(
-                                  { sectionId: section.id, slotId, elementId: element.id },
-                                  event.shiftKey || event.metaKey,
-                                )
-                              }
-                              onDuplicate={() => duplicateElement(section.id, element.id)}
-                              onRemove={() => removeElement(section.id, element.id)}
-                            >
-                              <AnimateHost node={element} className="inline-flex max-w-full">
-                                <LandingElement element={element} interactive={false} />
-                              </AnimateHost>
-                            </Overlay>
-                          )}
+                          renderElement={(element: PageElement, slotId: string) => {
+                            const renderNested = (node: PageElement, nodeSlotId: string): ReactNode => (
+                              <Overlay
+                                id={node.id}
+                                kind="element"
+                                label={node.type}
+                                selected={selectedRefs.some((ref) => ref.elementId === node.id)}
+                                data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
+                                onSelect={(event) =>
+                                  toggleSelectElement(
+                                    { sectionId: section.id, slotId: nodeSlotId, elementId: node.id },
+                                    event.shiftKey || event.metaKey,
+                                  )
+                                }
+                                onDuplicate={() => duplicateElement(section.id, node.id)}
+                                onRemove={() => removeElement(section.id, node.id)}
+                              >
+                                <AnimateHost node={node} className={node.type === "frame" ? "block w-full" : "inline-flex max-w-full"}>
+                                  <LandingElement
+                                    element={node}
+                                    interactive={false}
+                                    renderChild={(child, parent) => renderNested(child, frameSlotId(parent.id))}
+                                    renderFrameEmpty={(parent) => (
+                                      <FrameDropZone sectionId={section.id} parentId={parent.id} />
+                                    )}
+                                  />
+                                </AnimateHost>
+                              </Overlay>
+                            );
+                            return renderNested(element, slotId);
+                          }}
                           renderEmptySlot={(slotId) => {
                             const def = slotDefs(section.type).find((slot) => slot.id === slotId) as
                               | SlotDefinition

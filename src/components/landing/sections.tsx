@@ -1,9 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AnimateHost } from "@/components/landing/animate";
+import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
 import { useNodeCss } from "@/components/landing/style-preview";
+import { isTextAnimation } from "@/lib/animations";
 import { elementSlot, elementsSlot, textSlot } from "@/lib/slots";
 import type { PageSection, ThemeConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,12 @@ function lines(value: unknown) {
     .split(/[,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function slotCopy(section: PageSection, id: string, fallback = "") {
+  const value = textSlot(section, id, fallback);
+  if (isTextAnimation(section.animation?.preset)) return renderAnimatedText(section, value);
+  return value;
 }
 
 function BrandMark({ theme }: { theme: ThemeConfig }) {
@@ -85,7 +92,7 @@ export function LandingSection({
 }) {
   const p = section.props;
   const sectionCss = useNodeCss(section);
-  const t = (id: string, fallback = "") => textSlot(section, id, str(p[id], fallback));
+  const t = (id: string, fallback = "") => slotCopy(section, id, str(p[id], fallback));
   const extras = (id: string) => elementsSlot(section, id);
   const node = (id: string) => elementSlot(section, id);
   const renderEl = (element: import("@/lib/types").PageElement, slotId: string) =>
@@ -97,11 +104,11 @@ export function LandingSection({
       </AnimateHost>
     );
   const empty = (id: string) => renderEmptySlot?.(id) ?? null;
-  const stack = (slotId: string) => {
+  const stack = (slotId: string, options?: { tight?: boolean }) => {
     const items = extras(slotId);
     if (!items.length && !renderEmptySlot) return null;
     return (
-      <div className="mt-6 flex w-full flex-col items-stretch gap-4">
+      <div className={cn(options?.tight ? "mt-0" : "mt-6", "flex w-full flex-col items-stretch gap-4")}>
         {items.map((element) => (
           <div key={element.id}>{renderEl(element, slotId)}</div>
         ))}
@@ -264,9 +271,7 @@ export function LandingSection({
               <h2 className="text-3xl font-semibold md:text-4xl" style={{ fontFamily: "var(--lp-font-heading)" }}>
                 {t("headline")}
               </h2>
-              <p className="text-lg leading-8" style={{ color: "var(--lp-muted-fg)" }}>
-                {t("body")}
-              </p>
+              {stack("body", { tight: true })}
               {stack("extra")}
             </div>
           </div>

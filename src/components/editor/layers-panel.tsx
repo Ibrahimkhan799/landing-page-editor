@@ -23,7 +23,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEditor } from "@/components/editor/editor-context";
-import { elementsSlot, elementSlot, slotDefs } from "@/lib/slots";
+import { elementsSlot, elementSlot, frameSlotId, slotDefs } from "@/lib/slots";
 import type { PageElement, PageSection } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -100,6 +100,39 @@ function SlotLayer({
     <div ref={setNodeRef} className={cn("rounded-sm", isOver && "bg-[#0d99ff]/10")}>
       {children}
     </div>
+  );
+}
+
+function LayerTree({
+  sectionId,
+  slotId,
+  element,
+  depth,
+}: {
+  sectionId: string;
+  slotId: string;
+  element: PageElement;
+  depth: number;
+}) {
+  const { toggleSelectElement, selectedRefs } = useEditor();
+  const Icon = elementIcon(element.type);
+  const active = selectedRefs.some((ref) => ref.elementId === element.id);
+  const childSlot = frameSlotId(element.id);
+  return (
+    <>
+      <SortableLayer
+        id={`layer-el-${element.id}`}
+        data={{ kind: "layer-element", sectionId, slotId, elementId: element.id }}
+        depth={depth}
+        label={element.type}
+        icon={Icon}
+        active={active}
+        onClick={() => toggleSelectElement({ sectionId, slotId, elementId: element.id }, false)}
+      />
+      {(element.children ?? []).map((child) => (
+        <LayerTree key={child.id} sectionId={sectionId} slotId={childSlot} element={child} depth={depth + 1} />
+      ))}
+    </>
   );
 }
 
@@ -185,44 +218,26 @@ function SectionLayers({ section }: { section: PageSection }) {
                 </div>
                 {sortable ? (
                   <SortableContext items={items.map((item) => `layer-el-${item.id}`)} strategy={verticalListSortingStrategy}>
-                    {items.map((element) => {
-                      const Icon = elementIcon(element.type);
-                      const active = selectedRefs.some((ref) => ref.elementId === element.id);
-                      return (
-                        <SortableLayer
-                          key={element.id}
-                          id={`layer-el-${element.id}`}
-                          data={{ kind: "layer-element", sectionId: section.id, slotId: slot.id, elementId: element.id }}
-                          depth={3}
-                          label={element.type}
-                          icon={Icon}
-                          active={active}
-                          onClick={() =>
-                            toggleSelectElement({ sectionId: section.id, slotId: slot.id, elementId: element.id }, false)
-                          }
-                        />
-                      );
-                    })}
+                    {items.map((element) => (
+                      <LayerTree
+                        key={element.id}
+                        sectionId={section.id}
+                        slotId={slot.id}
+                        element={element}
+                        depth={3}
+                      />
+                    ))}
                   </SortableContext>
                 ) : (
-                  items.map((element) => {
-                    const Icon = elementIcon(element.type);
-                    const active = selectedRefs.some((ref) => ref.elementId === element.id);
-                    return (
-                      <SortableLayer
-                        key={element.id}
-                        id={`layer-el-${element.id}`}
-                        data={{ kind: "layer-element", sectionId: section.id, slotId: slot.id, elementId: element.id }}
-                        depth={3}
-                        label={element.type}
-                        icon={Icon}
-                        active={active}
-                        onClick={() =>
-                          toggleSelectElement({ sectionId: section.id, slotId: slot.id, elementId: element.id }, false)
-                        }
-                      />
-                    );
-                  })
+                  items.map((element) => (
+                    <LayerTree
+                      key={element.id}
+                      sectionId={section.id}
+                      slotId={slot.id}
+                      element={element}
+                      depth={3}
+                    />
+                  ))
                 )}
               </SlotLayer>
             );

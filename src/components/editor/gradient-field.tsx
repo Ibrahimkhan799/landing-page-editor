@@ -130,7 +130,7 @@ export function GradientField({
                   <span className="truncate font-mono text-[10px]">{stop.color}</span>
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="editor-popover w-[220px] p-2.5">
+              <PopoverContent className="editor-popover w-[248px] p-2.5">
                 <ColorPickerBody color={stop.color} onChange={(color) => updateStop(index, { color })} swatches={swatches} />
               </PopoverContent>
             </Popover>

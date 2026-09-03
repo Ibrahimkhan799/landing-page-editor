@@ -1,7 +1,8 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Play, Trash2 } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { SliderRow } from "@/components/editor/compact-controls";
 import { playNodeAnimation } from "@/components/landing/animate";
 import {
@@ -11,6 +12,8 @@ import {
   animationTracks,
   defaultAnimation,
   isTextAnimation,
+  motionTransition,
+  motionVariants,
   needsDistance,
 } from "@/lib/animations";
 import type { AnimationConfig, AnimationPreset, AnimationTrigger, NodeMeta } from "@/lib/types";
@@ -206,12 +209,12 @@ function EffectLibrary({
                   type="button"
                   onClick={() => onPick(item.id)}
                   className={cn(
-                    "flex h-8 w-full items-center gap-2 px-1.5 text-left",
+                    "group flex h-8 w-full items-center gap-2 px-1.5 text-left",
                     index > 0 && "border-t border-zinc-100",
                     selected ? "bg-zinc-900 text-white" : "bg-white text-zinc-700 hover:bg-zinc-50",
                   )}
                 >
-                  <PreviewGlyph preset={item.id} active={selected} />
+                  <PreviewGlyph preset={item.id} active={selected} hoverOnly />
                   <span className="text-[11px] font-medium">{item.label}</span>
                 </button>
               );
@@ -283,29 +286,32 @@ function PreviewStage({ preset, anim }: { preset: AnimationPreset; anim: Animati
     <div className="overflow-hidden rounded-md border border-zinc-200 bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%,transparent_75%,#f4f4f5_75%),linear-gradient(45deg,#f4f4f5_25%,white_25%,white_75%,#f4f4f5_75%)] bg-[length:10px_10px] bg-[position:0_0,5px_5px]">
       <div className="flex h-16 items-center justify-center">
         {isTextAnimation(preset) ? (
-          <span className="flex gap-0.5 text-[11px] font-medium text-zinc-700">
+          <span className="text-[11px] font-medium text-zinc-700">
             {["In", "view"].map((word, index) => (
-              <span
+              <motion.span
                 key={word}
-                className="lp-anim-unit"
-                style={
-                  {
-                    "--lp-unit-i": index,
-                    animation: `${preset === "text-blur" ? "lp-blur-in" : preset === "text-slide" ? "lp-slide-up" : "lp-fade-in"} ${anim.duration}s ${anim.easing} ${anim.delay + index * anim.stagger}s infinite both`,
-                  } as CSSProperties
-                }
+                className="inline-block"
+                style={{ marginRight: index === 0 ? "0.3em" : undefined }}
+                variants={motionVariants(preset, anim.distance)}
+                initial="hidden"
+                animate="visible"
+                transition={{
+                  ...motionTransition(anim, index),
+                  repeat: Infinity,
+                  repeatDelay: 0.6,
+                }}
               >
                 {word}
-              </span>
+              </motion.span>
             ))}
           </span>
         ) : (
-          <span
+          <motion.span
             className="block h-7 w-16 rounded-[4px] bg-zinc-800"
-            style={{
-              animation: `${keyframeName(preset)} ${anim.duration}s ${anim.easing} ${anim.delay}s infinite both`,
-              ["--lp-anim-distance" as string]: `${anim.distance}px`,
-            }}
+            variants={motionVariants(preset, anim.distance)}
+            initial="hidden"
+            animate="visible"
+            transition={{ ...motionTransition(anim), repeat: Infinity, repeatDelay: 0.55 }}
           />
         )}
       </div>
@@ -313,32 +319,39 @@ function PreviewStage({ preset, anim }: { preset: AnimationPreset; anim: Animati
   );
 }
 
-function PreviewGlyph({ preset, active }: { preset: AnimationPreset; active?: boolean }) {
+function PreviewGlyph({
+  preset,
+  active,
+  hoverOnly,
+}: {
+  preset: AnimationPreset;
+  active?: boolean;
+  hoverOnly?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const play = hoverOnly ? hovered : false;
+
   return (
     <span
       className={cn(
         "grid size-6 shrink-0 place-items-center overflow-hidden rounded-[3px]",
         active ? "bg-white/15" : "bg-zinc-100",
       )}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <span
+      <motion.span
+        key={play ? "play" : "rest"}
         className={cn("block h-2.5 w-3.5 rounded-[2px]", active ? "bg-white" : "bg-zinc-700")}
-        style={{
-          animation: `${keyframeName(preset)} 1.6s ease-out infinite both`,
-          ["--lp-anim-distance" as string]: "6px",
-        }}
+        variants={motionVariants(preset, 6)}
+        initial={play ? "hidden" : "visible"}
+        animate="visible"
+        transition={
+          play
+            ? { duration: 0.55, ease: "easeOut", repeat: Infinity, repeatType: "loop", repeatDelay: 0.35 }
+            : { duration: 0.15 }
+        }
       />
     </span>
   );
-}
-
-function keyframeName(preset: AnimationPreset) {
-  if (preset === "text-fade" || preset === "fade-in") return "lp-fade-in";
-  if (preset === "fade-out") return "lp-fade-out";
-  if (preset.includes("blur")) return "lp-blur-in";
-  if (preset === "scale-in") return "lp-scale-in";
-  if (preset.includes("down")) return "lp-slide-down";
-  if (preset.includes("left")) return "lp-slide-left";
-  if (preset.includes("right")) return "lp-slide-right";
-  return "lp-slide-up";
 }

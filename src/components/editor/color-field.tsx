@@ -65,17 +65,18 @@ export function ColorPickerBody({
   const alpha = parsed && color ? parsed.alpha : readAlpha(color);
 
   return (
-    <div className="grid gap-1">
+    <div className="grid min-w-0 gap-1.5">
       <HexColorPicker className="color-picker !w-full" color={hex} onChange={(next) => onChange(paintValue(next, alpha))} />
-      <div className="flex items-center gap-1">
-        <ColorSwatch color={paintValue(hex, alpha)} className="size-4" />
+      <div className="flex min-w-0 items-center gap-1">
+        <ColorSwatch color={paintValue(hex, alpha)} className="size-4 shrink-0" />
         <HexColorInput
           prefixed
           color={hex}
           onChange={(next) => onChange(paintValue(next, alpha))}
-          className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1.5 font-mono text-[11px] uppercase"
+          className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1.5 font-mono text-[10px] uppercase outline-none"
         />
         <MiniInput
+          width="w-12"
           value={Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)}
           suffix="%"
           onChange={(next) => {
@@ -93,13 +94,13 @@ export function ColorPickerBody({
         onChange={(next) => onChange(paintValue(hex, next / 100))}
       />
       {swatches?.length ? (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex max-w-full flex-wrap gap-1.5 overflow-hidden pt-0.5">
           {[...new Set(swatches)].map((swatch) => (
             <button
               key={swatch}
               type="button"
               title={swatch}
-              className="size-4 rounded-[3px] ring-1 ring-black/10"
+              className="size-3.5 shrink-0 rounded-[3px] ring-1 ring-black/10"
               style={{ backgroundColor: swatch }}
               onClick={() => onChange(swatch)}
             />
@@ -149,7 +150,7 @@ export function ColorField({
             <span className={cn("flex-1 font-mono text-[11px]", inherited && "text-zinc-400")}>{shown}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="editor-popover w-[220px] rounded-lg border-zinc-200 p-2.5 shadow-xl">
+        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-2.5 shadow-xl">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-medium text-zinc-700">{label}</p>
             {stored ? (

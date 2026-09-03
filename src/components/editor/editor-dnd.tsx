@@ -99,7 +99,7 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         overSectionId &&
         overSlotId &&
         (overSectionId !== activeData.sectionId || overSlotId !== activeData.slotId) &&
-        (overData?.kind === "slot" || overData?.kind === "element")
+        (overData?.kind === "slot" || overData?.kind === "element" || overData?.kind === "frame")
       ) {
         relocateElement(activeData.sectionId, activeData.slotId, String(active.id), overSectionId, overSlotId);
         return;

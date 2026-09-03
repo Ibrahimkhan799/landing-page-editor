@@ -32,7 +32,7 @@ export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
   about: [
     { id: "eyebrow", label: "Eyebrow", kind: "text" },
     { id: "headline", label: "Headline", kind: "text" },
-    { id: "body", label: "Body", kind: "text" },
+    { id: "body", label: "Body", kind: "elements" },
     { id: "media", label: "Media", kind: "element", accept: ["image", "video"] },
     { id: "extra", label: "Extra elements", kind: "elements" },
   ],
@@ -106,26 +106,39 @@ export function elementsSlot(section: PageSection, id: string): PageElement[] {
   return [];
 }
 
-export function allSectionElements(section: PageSection): { slotId: string; element: PageElement }[] {
-  const found: { slotId: string; element: PageElement }[] = [];
+export function allSectionElements(section: PageSection): { slotId: string; element: PageElement; parentId?: string }[] {
+  const found: { slotId: string; element: PageElement; parentId?: string }[] = [];
+
+  function walk(elements: PageElement[], slotId: string, parentId?: string) {
+    for (const element of elements) {
+      found.push({ slotId, element, parentId });
+      if (element.children?.length) walk(element.children, frameSlotId(element.id), element.id);
+    }
+  }
+
   for (const def of slotDefs(section.type)) {
     if (def.kind === "element") {
       const element = elementSlot(section, def.id);
-      if (element) found.push({ slotId: def.id, element });
+      if (element) walk([element], def.id);
     }
-    if (def.kind === "elements") {
-      for (const element of elementsSlot(section, def.id)) {
-        found.push({ slotId: def.id, element });
-      }
-    }
+    if (def.kind === "elements") walk(elementsSlot(section, def.id), def.id);
   }
   return found;
+}
+
+export function frameSlotId(parentId: string) {
+  return `frame:${parentId}`;
+}
+
+export function parseFrameSlotId(slotId: string) {
+  if (!slotId.startsWith("frame:")) return null;
+  return slotId.slice(6);
 }
 
 export function findElement(
   section: PageSection,
   elementId: string,
-): { slotId: string; element: PageElement } | null {
+): { slotId: string; element: PageElement; parentId?: string } | null {
   return allSectionElements(section).find((item) => item.element.id === elementId) ?? null;
 }
 

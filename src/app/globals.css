@@ -95,7 +95,7 @@ body {
   margin-bottom: 8px;
 }
 
-.editor-ui input:not([type="file"]):not([type="checkbox"]),
+.editor-ui input:not([type="file"]):not([type="checkbox"]):not([data-editor-mini]),
 .editor-ui textarea,
 .editor-ui button[role="combobox"] {
   height: 24px;
@@ -105,6 +105,17 @@ body {
   background-color: #f4f4f5;
   box-shadow: none;
   font-size: 11px;
+}
+
+.editor-ui input[data-editor-mini] {
+  height: 20px;
+  min-height: 20px;
+  border-radius: 3px;
+  border: 0;
+  background-color: #f4f4f5;
+  box-shadow: none;
+  font-size: 10px;
+  line-height: 1;
 }
 
 .editor-ui textarea {
@@ -136,7 +147,12 @@ body {
 }
 
 .editor-popover {
-  max-height: min(400px, calc(100vh - 64px));
+  max-height: min(420px, calc(100vh - 48px));
   overflow-x: hidden;
   overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.editor-popover * {
+  box-sizing: border-box;
 }

@@ -14,7 +14,7 @@ import {
 import { cloneElementNode, cloneSection, createElement, createSection } from "@/lib/defaults";
 import { migratePage } from "@/lib/migrate";
 import { alignStylePatch, applyStyleBucket, cloneStyleProps, editingBucket, mergeStyles } from "@/lib/node-styles";
-import { defaultElementsSlot, findElement, slotDefs } from "@/lib/slots";
+import { defaultElementsSlot, findElement, frameSlotId, parseFrameSlotId, slotDefs } from "@/lib/slots";
 import type {
   AlignKind,
   Breakpoint,
@@ -55,16 +55,61 @@ function mapSection(page: LandingPage, sectionId: string, updater: (section: Pag
   };
 }
 
+function mapTree(elements: PageElement[], elementId: string, updater: (element: PageElement) => PageElement): PageElement[] {
+  return elements.map((element) => {
+    if (element.id === elementId) return updater(element);
+    if (element.children?.length) {
+      return { ...element, children: mapTree(element.children, elementId, updater) };
+    }
+    return element;
+  });
+}
+
 function mapElement(section: PageSection, elementId: string, updater: (element: PageElement) => PageElement) {
   const slots = { ...section.slots };
   for (const [key, value] of Object.entries(slots)) {
     if (Array.isArray(value)) {
-      slots[key] = value.map((element) => (element.id === elementId ? updater(element) : element));
-    } else if (value && typeof value === "object" && "id" in value && value.id === elementId) {
-      slots[key] = updater(value as PageElement);
+      slots[key] = mapTree(value, elementId, updater);
+    } else if (value && typeof value === "object" && "id" in value) {
+      const element = value as PageElement;
+      if (element.id === elementId) slots[key] = updater(element);
+      else if (element.children?.length) {
+        slots[key] = { ...element, children: mapTree(element.children, elementId, updater) };
+      }
     }
   }
   return { ...section, slots };
+}
+
+function stripElement(elements: PageElement[], elementId: string): PageElement[] {
+  return elements
+    .filter((element) => element.id !== elementId)
+    .map((element) =>
+      element.children?.length ? { ...element, children: stripElement(element.children, elementId) } : element,
+    );
+}
+
+function appendChild(elements: PageElement[], parentId: string, child: PageElement): PageElement[] {
+  return elements.map((element) => {
+    if (element.id === parentId) {
+      return { ...element, children: [...(element.children ?? []), child] };
+    }
+    if (element.children?.length) {
+      return { ...element, children: appendChild(element.children, parentId, child) };
+    }
+    return element;
+  });
+}
+
+function findInTree(elements: PageElement[], elementId: string): PageElement | null {
+  for (const element of elements) {
+    if (element.id === elementId) return element;
+    if (element.children?.length) {
+      const nested = findInTree(element.children, elementId);
+      if (nested) return nested;
+    }
+  }
+  return null;
 }
 
 function insertIntoSlot(section: PageSection, slotId: string, element: PageElement, index?: number): PageSection {
@@ -321,8 +366,35 @@ export function EditorProvider({
       let targetSlot = slotId;
       mutate((current) =>
         mapSection(current, sectionId, (section) => {
-          const defs = slotDefs(section.type);
           const currentSelection = selectionRef.current;
+          const selectedFrameId =
+            currentSelection.kind === "element" && currentSelection.sectionId === sectionId
+              ? findElement(section, currentSelection.elementId)?.element.type === "frame"
+                ? currentSelection.elementId
+                : parseFrameSlotId(currentSelection.slotId)
+              : currentSelection.kind === "slot" && currentSelection.sectionId === sectionId
+                ? parseFrameSlotId(currentSelection.slotId)
+                : null;
+
+          const explicitFrame = targetSlot ? parseFrameSlotId(targetSlot) : null;
+          const frameParent = explicitFrame ?? (!targetSlot ? selectedFrameId : null);
+
+          if (frameParent) {
+            targetSlot = frameSlotId(frameParent);
+            const slots = { ...section.slots };
+            for (const [key, value] of Object.entries(slots)) {
+              if (key.startsWith("frame:")) continue;
+              if (Array.isArray(value)) slots[key] = appendChild(value, frameParent, element);
+              else if (value && typeof value === "object" && "id" in value) {
+                const node = value as PageElement;
+                if (node.id === frameParent) slots[key] = { ...node, children: [...(node.children ?? []), element] };
+                else if (node.children?.length) slots[key] = { ...node, children: appendChild(node.children, frameParent, element) };
+              }
+            }
+            return { ...section, slots };
+          }
+
+          const defs = slotDefs(section.type);
           const preferred =
             targetSlot ??
             (currentSelection.kind === "slot" && currentSelection.sectionId === sectionId
@@ -344,6 +416,21 @@ export function EditorProvider({
                     (!slot.accept?.length || slot.accept.includes(type)),
                 )?.id ?? preferred;
           targetSlot = accepted;
+          if (parseFrameSlotId(accepted)) {
+            // Safety: never write a synthetic frame slot key onto section.slots
+            const parent = parseFrameSlotId(accepted)!;
+            targetSlot = frameSlotId(parent);
+            const slots = { ...section.slots };
+            for (const [key, value] of Object.entries(slots)) {
+              if (Array.isArray(value)) slots[key] = appendChild(value, parent, element);
+              else if (value && typeof value === "object" && "id" in value) {
+                const node = value as PageElement;
+                if (node.id === parent) slots[key] = { ...node, children: [...(node.children ?? []), element] };
+                else if (node.children?.length) slots[key] = { ...node, children: appendChild(node.children, parent, element) };
+              }
+            }
+            return { ...section, slots };
+          }
           const targetDef = defs.find((slot) => slot.id === accepted);
           const slots = { ...section.slots };
           if (targetDef?.kind === "element") {
@@ -366,8 +453,12 @@ export function EditorProvider({
         mapSection(current, sectionId, (section) => {
           const slots = { ...section.slots };
           for (const [key, value] of Object.entries(slots)) {
-            if (Array.isArray(value)) slots[key] = value.filter((element) => element.id !== elementId);
-            else if (value && typeof value === "object" && "id" in value && value.id === elementId) slots[key] = null;
+            if (Array.isArray(value)) slots[key] = stripElement(value, elementId);
+            else if (value && typeof value === "object" && "id" in value) {
+              const node = value as PageElement;
+              if (node.id === elementId) slots[key] = null;
+              else if (node.children?.length) slots[key] = { ...node, children: stripElement(node.children, elementId) };
+            }
           }
           return { ...section, slots };
         }),
@@ -388,8 +479,25 @@ export function EditorProvider({
           const copy = cloneElementNode(found.element);
           copyId = copy.id;
           slotId = found.slotId;
-          const def = slotDefs(section.type).find((slot) => slot.id === found.slotId);
+          const frameParent = parseFrameSlotId(found.slotId) ?? found.parentId;
           const slots = { ...section.slots };
+          if (frameParent) {
+            const insertAfter = (elements: PageElement[]): PageElement[] =>
+              elements.flatMap((element) => {
+                if (element.id === elementId) return [element, copy];
+                if (element.children?.length) return [{ ...element, children: insertAfter(element.children) }];
+                return [element];
+              });
+            for (const [key, value] of Object.entries(slots)) {
+              if (Array.isArray(value)) slots[key] = insertAfter(value);
+              else if (value && typeof value === "object" && "id" in value) {
+                const node = value as PageElement;
+                if (node.children?.length) slots[key] = { ...node, children: insertAfter(node.children) };
+              }
+            }
+            return { ...section, slots };
+          }
+          const def = slotDefs(section.type).find((slot) => slot.id === found.slotId);
           if (def?.kind === "element") {
             slots[found.slotId] = copy;
           } else {
@@ -413,6 +521,31 @@ export function EditorProvider({
         const stripped = current.sections.map((section) => {
           if (section.id !== fromSectionId) return section;
           const slots = { ...section.slots };
+          const frameParent = parseFrameSlotId(fromSlotId);
+          if (frameParent) {
+            for (const [key, value] of Object.entries(slots)) {
+              if (Array.isArray(value)) {
+                const found = findInTree(value, elementId);
+                if (found) {
+                  moving = found;
+                  slots[key] = stripElement(value, elementId);
+                }
+              } else if (value && typeof value === "object" && "id" in value) {
+                const node = value as PageElement;
+                if (node.id === elementId) {
+                  moving = node;
+                  slots[key] = null;
+                } else if (node.children?.length) {
+                  const found = findInTree(node.children, elementId);
+                  if (found) {
+                    moving = found;
+                    slots[key] = { ...node, children: stripElement(node.children, elementId) };
+                  }
+                }
+              }
+            }
+            return { ...section, slots };
+          }
           const value = slots[fromSlotId];
           if (Array.isArray(value)) {
             moving = value.find((element) => element.id === elementId) ?? null;
@@ -428,8 +561,22 @@ export function EditorProvider({
           ...current,
           sections: stripped.map((section) => {
             if (section.id !== toSectionId) return section;
-            const def = slotDefs(section.type).find((slot) => slot.id === toSlotId);
+            const toFrame = parseFrameSlotId(toSlotId);
             const slots = { ...section.slots };
+            if (toFrame) {
+              for (const [key, value] of Object.entries(slots)) {
+                if (Array.isArray(value)) slots[key] = appendChild(value, toFrame, moving as PageElement);
+                else if (value && typeof value === "object" && "id" in value) {
+                  const node = value as PageElement;
+                  if (node.id === toFrame) slots[key] = { ...node, children: [...(node.children ?? []), moving as PageElement] };
+                  else if (node.children?.length) {
+                    slots[key] = { ...node, children: appendChild(node.children, toFrame, moving as PageElement) };
+                  }
+                }
+              }
+              return { ...section, slots };
+            }
+            const def = slotDefs(section.type).find((slot) => slot.id === toSlotId);
             if (def?.kind === "element") slots[toSlotId] = moving;
             else {
               const list = Array.isArray(slots[toSlotId]) ? [...(slots[toSlotId] as PageElement[])] : [];

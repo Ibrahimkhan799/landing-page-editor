@@ -33,7 +33,7 @@ export function BlurPopover({
             <span>Layer {layerValue} · Backdrop {backdropValue}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="editor-popover w-[228px] space-y-2 p-2.5">
+        <PopoverContent className="editor-popover w-[248px] space-y-2 p-2.5">
           <p className="text-[11px] font-medium">Blur</p>
           <SliderRow
             label="Layer"

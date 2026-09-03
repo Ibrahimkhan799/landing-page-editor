@@ -18,6 +18,7 @@ import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
 import { useNodeCss, usePreviewStateAttr } from "@/components/landing/style-preview";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
+import type { ReactNode } from "react";
 
 const headingSizes = {
   h1: "text-4xl md:text-6xl font-semibold tracking-tight",
@@ -41,9 +42,13 @@ function asBool(value: unknown, fallback = false) {
 export function LandingElement({
   element,
   interactive = true,
+  renderChild,
+  renderFrameEmpty,
 }: {
   element: PageElement;
   interactive?: boolean;
+  renderChild?: (child: PageElement, parent: PageElement) => ReactNode;
+  renderFrameEmpty?: (parent: PageElement) => ReactNode;
 }) {
   const p = element.props;
   const align = asString(p.align, "left");
@@ -265,9 +270,24 @@ export function LandingElement({
             ...nodeCss,
           }}
         >
-          {asString(p.label) ? (
-            <p className="text-[11px] font-medium text-zinc-500">{asString(p.label)}</p>
-          ) : null}
+          <div className="flex flex-col gap-3">
+            {asString(p.label) ? (
+              <p className="text-[11px] font-medium text-zinc-500">{asString(p.label)}</p>
+            ) : null}
+            {(element.children ?? []).map((child) =>
+              renderChild ? (
+                <div key={child.id}>{renderChild(child, element)}</div>
+              ) : (
+                <AnimateHost key={child.id} node={child} className="block w-full">
+                  <LandingElement element={child} interactive={interactive} />
+                </AnimateHost>
+              ),
+            )}
+            {renderFrameEmpty?.(element) ??
+              (!(element.children ?? []).length ? (
+                <p className="text-[11px] text-zinc-400">Drop elements into this frame</p>
+              ) : null)}
+          </div>
         </div>
       );
     case "card":

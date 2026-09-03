@@ -171,6 +171,7 @@ export type PageElement = NodeMeta & {
   id: string;
   type: ElementType;
   props: Record<string, unknown>;
+  children?: PageElement[];
 };
 
 export type SlotValue = string | PageElement | PageElement[] | null;

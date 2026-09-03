@@ -3,7 +3,15 @@ import { defaultElementsSlot, slotDefs } from "@/lib/slots";
 import type { ElementType, LandingPage, PageElement, PageSection, SlotValue } from "@/lib/types";
 
 function makeElement(type: ElementType, props: Record<string, unknown> = {}): PageElement {
-  return { id: nanoid(10), type, props, className: "", htmlId: "", styles: {} };
+  return {
+    id: nanoid(10),
+    type,
+    props,
+    className: "",
+    htmlId: "",
+    styles: {},
+    children: type === "frame" ? [] : undefined,
+  };
 }
 
 function asElement(value: unknown): PageElement | null {
@@ -84,6 +92,17 @@ export function migrateSection(section: PageSection): PageSection {
     delete props.image;
   }
 
+  if (section.type === "about") {
+    if (typeof slots.body === "string") {
+      const text = slots.body.trim();
+      slots.body = text ? [makeElement("paragraph", { text })] : [];
+    } else if (!Array.isArray(slots.body)) {
+      const text = typeof props.body === "string" ? props.body.trim() : "";
+      slots.body = text ? [makeElement("paragraph", { text })] : [];
+      delete props.body;
+    }
+  }
+
   if (section.type === "cta" && !asElement(slots.action)) {
     slots.action = makeElement("button", {
       label: typeof props.ctaLabel === "string" ? props.ctaLabel : "Get started",
@@ -100,6 +119,10 @@ export function migrateSection(section: PageSection): PageSection {
 
   if (section.type === "custom" && !(slots.body as PageElement[])?.length) {
     slots.body = legacyElements;
+  }
+
+  for (const key of Object.keys(slots)) {
+    if (key.startsWith("frame:")) delete slots[key];
   }
 
   return {

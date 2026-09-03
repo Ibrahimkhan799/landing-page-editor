@@ -85,7 +85,7 @@ export function FillPopover({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="editor-popover w-[228px] rounded-lg border-zinc-200 p-0 shadow-xl">
+        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-0 shadow-xl">
           <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
             <p className="text-[11px] font-medium text-zinc-700">Fill</p>
             <button
