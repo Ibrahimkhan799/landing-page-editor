@@ -47,8 +47,9 @@ function DraggableItem({
 }
 
 function InsertPanel() {
-  const { addSection, addElement, selectedSection, insertSavedSection } = useEditor();
+  const { addSection, addElement, selectedSection, insertSavedSection, editorMode } = useEditor();
   const [components, setComponents] = useState<SavedComponent[]>([]);
+  const isComponent = editorMode === "component";
 
   useEffect(() => {
     fetch("/api/components")
@@ -66,49 +67,55 @@ function InsertPanel() {
   }
 
   return (
-    <Tabs defaultValue="sections" className="flex min-h-0 flex-1 flex-col">
+    <Tabs defaultValue={isComponent ? "elements" : "sections"} className="flex min-h-0 flex-1 flex-col">
       <div className="px-2 pt-2">
-        <TabsList className="grid h-7 w-full grid-cols-3 bg-zinc-100 p-0.5">
-          <TabsTrigger value="sections" className="h-6 text-[11px]">
-            Sections
-          </TabsTrigger>
+        <TabsList className={cn("grid h-7 w-full bg-zinc-100 p-0.5", isComponent ? "grid-cols-1" : "grid-cols-3")}>
+          {!isComponent ? (
+            <TabsTrigger value="sections" className="h-6 text-[11px]">
+              Sections
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="elements" className="h-6 text-[11px]">
             Elements
           </TabsTrigger>
-          <TabsTrigger value="saved" className="h-6 text-[11px]">
-            Saved
-          </TabsTrigger>
+          {!isComponent ? (
+            <TabsTrigger value="saved" className="h-6 text-[11px]">
+              Saved
+            </TabsTrigger>
+          ) : null}
         </TabsList>
       </div>
-      <TabsContent value="sections" className="mt-0 min-h-0 flex-1">
-        <ScrollArea className="h-full">
-          <div className="space-y-4 p-2">
-            {groups.map((group) => (
-              <div key={group}>
-                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  {group}
-                </p>
-                <div className="grid gap-1">
-                  {SECTION_CATALOG.filter((item) => item.group === group).map((item) => (
-                    <DraggableItem
-                      key={item.type}
-                      id={`lib-section-${item.type}`}
-                      data={{ kind: "library-section", type: item.type as SectionType }}
-                      onClick={() => addSection(item.type)}
-                      className="rounded-md px-2 py-1.5 text-left hover:bg-zinc-100"
-                    >
-                      <div className="flex items-center gap-2 text-[12px] font-medium">
-                        <Layers className="size-3.5 text-zinc-400" />
-                        {item.label}
-                      </div>
-                    </DraggableItem>
-                  ))}
+      {!isComponent ? (
+        <TabsContent value="sections" className="mt-0 min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <div className="space-y-4 p-2">
+              {groups.map((group) => (
+                <div key={group}>
+                  <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    {group}
+                  </p>
+                  <div className="grid gap-1">
+                    {SECTION_CATALOG.filter((item) => item.group === group).map((item) => (
+                      <DraggableItem
+                        key={item.type}
+                        id={`lib-section-${item.type}`}
+                        data={{ kind: "library-section", type: item.type as SectionType }}
+                        onClick={() => addSection(item.type)}
+                        className="rounded-md px-2 py-1.5 text-left hover:bg-zinc-100"
+                      >
+                        <div className="flex items-center gap-2 text-[12px] font-medium">
+                          <Layers className="size-3.5 text-zinc-400" />
+                          {item.label}
+                        </div>
+                      </DraggableItem>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </TabsContent>
+              ))}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      ) : null}
       <TabsContent value="elements" className="mt-0 min-h-0 flex-1">
         <ScrollArea className="h-full">
           <div className="space-y-0.5 p-2">
@@ -131,32 +138,44 @@ function InsertPanel() {
           </div>
         </ScrollArea>
       </TabsContent>
-      <TabsContent value="saved" className="mt-0 min-h-0 flex-1">
-        <ScrollArea className="h-full">
-          <div className="space-y-1 p-2">
-            {components.length === 0 ? (
-              <p className="px-1 text-[11px] text-zinc-400">Save a section from the inspector to reuse it as a component.</p>
-            ) : (
-              components.map((component) => (
-                <div key={component.id} className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-zinc-100">
-                  <div className="flex min-w-0 items-center gap-2 text-[12px]">
-                    <Puzzle className="size-3.5 text-[#7b61ff]" />
-                    <span className="truncate">{component.name}</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[11px]"
-                    onClick={() => insertSavedSection(component)}
+      {!isComponent ? (
+        <TabsContent value="saved" className="mt-0 min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <div className="space-y-1 p-2">
+              {components.length === 0 ? (
+                <p className="px-1 text-[11px] text-zinc-400">
+                  Save a section from the inspector to reuse it as a component.
+                </p>
+              ) : (
+                components.map((component) => (
+                  <div
+                    key={component.id}
+                    className="flex items-center justify-between gap-1 rounded-md px-2 py-1.5 hover:bg-zinc-100"
                   >
-                    Insert
-                  </Button>
-                </div>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </TabsContent>
+                    <div className="flex min-w-0 items-center gap-2 text-[12px]">
+                      <Puzzle className="size-3.5 text-[#7b61ff]" />
+                      <span className="truncate">{component.name}</span>
+                    </div>
+                    <div className="flex shrink-0">
+                      <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-[11px]">
+                        <a href={`/admin/component/${component.id}`}>Edit</a>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => insertSavedSection(component)}
+                      >
+                        Insert
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      ) : null}
     </Tabs>
   );
 }

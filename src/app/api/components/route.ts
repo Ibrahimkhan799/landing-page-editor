@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     responsive: body.section.responsive,
     states: body.section.states,
     elements: body.section.elements,
+    animation: body.section.animation,
   };
   const saved = await saveComponent({
     id: nanoid(10),

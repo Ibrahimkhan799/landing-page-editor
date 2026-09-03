@@ -140,13 +140,26 @@ export type AnimationPreset =
   | "fade-out"
   | "blur-in"
   | "scale-in"
+  | "pop"
+  | "bounce"
+  | "rotate-in"
+  | "flip-in"
   | "slide-up"
   | "slide-down"
   | "slide-left"
   | "slide-right"
+  | "rise"
+  | "float-in"
+  | "soft-bounce"
   | "text-fade"
   | "text-slide"
-  | "text-blur";
+  | "text-blur"
+  | "text-scale"
+  | "text-wave"
+  | "text-reveal"
+  | "text-type"
+  | "text-flip"
+  | "text-blur-up";
 
 export type AnimationConfig = {
   preset: AnimationPreset;

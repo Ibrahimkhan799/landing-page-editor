@@ -159,14 +159,15 @@ type EditorContextValue = {
   updatePage: (patch: Partial<LandingPage>) => void;
   updateTheme: (patch: Partial<ThemeConfig> | { colors: Partial<ThemeConfig["colors"]> } | { fonts: Partial<ThemeConfig["fonts"]> }) => void;
   addSection: (type: SectionType, atIndex?: number) => void;
-  insertSavedSection: (component: SavedComponent) => void;
+  insertElementBetweenSections: (type: ElementType, atIndex: number) => void;
+  insertSavedSection: (component: SavedComponent, atIndex?: number) => void;
   duplicateSection: (sectionId: string) => void;
   removeSection: (sectionId: string) => void;
   moveSection: (from: number, to: number) => void;
   updateSection: (sectionId: string, patch: Partial<PageSection>) => void;
   updateSectionProp: (sectionId: string, key: string, value: unknown) => void;
   updateSlot: (sectionId: string, slotId: string, value: SlotValue) => void;
-  addElement: (sectionId: string, type: ElementType, slotId?: string) => void;
+  addElement: (sectionId: string, type: ElementType, slotId?: string, atIndex?: number) => void;
   removeElement: (sectionId: string, elementId: string) => void;
   duplicateElement: (sectionId: string, elementId: string) => void;
   moveElement: (sectionId: string, slotId: string, from: number, to: number) => void;
@@ -194,6 +195,7 @@ type EditorContextValue = {
   selectedSlotId: string | null;
   canAlign: boolean;
   save: () => Promise<void>;
+  editorMode: "page" | "component";
 };
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -201,15 +203,24 @@ const EditorContext = createContext<EditorContextValue | null>(null);
 export function EditorProvider({
   initialPage,
   children,
+  persistPage,
+  mode = "page",
 }: {
   initialPage: LandingPage;
   children: ReactNode;
+  /** Override default page PUT — used by the isolated component editor. */
+  persistPage?: (page: LandingPage) => Promise<LandingPage>;
+  mode?: "page" | "component";
 }) {
   const [page, setPage] = useState(() => migratePage(initialPage));
   const pageRef = useRef(page);
+  const persistRef = useRef(persistPage);
   useEffect(() => {
     pageRef.current = page;
   }, [page]);
+  useEffect(() => {
+    persistRef.current = persistPage;
+  }, [persistPage]);
   const [selection, setSelection] = useState<Selection>({ kind: "page" });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -267,11 +278,32 @@ export function EditorProvider({
     [mutate],
   );
 
+  const insertElementBetweenSections = useCallback(
+    (type: ElementType, atIndex: number) => {
+      const element = createElement(type);
+      const section = createSection("custom");
+      section.name = "Block";
+      section.props = { background: "plain" };
+      section.slots = { body: [element] };
+      mutate((current) => {
+        const sections = [...current.sections];
+        sections.splice(atIndex, 0, section);
+        return { ...current, sections };
+      });
+      setSelection({ kind: "element", sectionId: section.id, slotId: "body", elementId: element.id });
+    },
+    [mutate],
+  );
+
   const insertSavedSection = useCallback(
-    (component: SavedComponent) => {
+    (component: SavedComponent, atIndex?: number) => {
       const section = cloneSection({ ...component.section, id: "tmp" }, { name: component.name });
       section.componentId = component.id;
-      mutate((current) => ({ ...current, sections: [...current.sections, section] }));
+      mutate((current) => {
+        const sections = [...current.sections];
+        sections.splice(atIndex ?? sections.length, 0, section);
+        return { ...current, sections };
+      });
       setSelection({ kind: "section", sectionId: section.id });
     },
     [mutate],
@@ -361,7 +393,7 @@ export function EditorProvider({
   );
 
   const addElement = useCallback(
-    (sectionId: string, type: ElementType, slotId?: string) => {
+    (sectionId: string, type: ElementType, slotId?: string, atIndex?: number) => {
       const element = createElement(type);
       let targetSlot = slotId;
       mutate((current) =>
@@ -387,8 +419,14 @@ export function EditorProvider({
               if (Array.isArray(value)) slots[key] = appendChild(value, frameParent, element);
               else if (value && typeof value === "object" && "id" in value) {
                 const node = value as PageElement;
-                if (node.id === frameParent) slots[key] = { ...node, children: [...(node.children ?? []), element] };
-                else if (node.children?.length) slots[key] = { ...node, children: appendChild(node.children, frameParent, element) };
+                if (node.id === frameParent) {
+                  const kids = [...(node.children ?? [])];
+                  const insertAt = atIndex === undefined ? kids.length : Math.max(0, Math.min(atIndex, kids.length));
+                  kids.splice(insertAt, 0, element);
+                  slots[key] = { ...node, children: kids };
+                } else if (node.children?.length) {
+                  slots[key] = { ...node, children: appendChild(node.children, frameParent, element) };
+                }
               }
             }
             return { ...section, slots };
@@ -417,7 +455,6 @@ export function EditorProvider({
                 )?.id ?? preferred;
           targetSlot = accepted;
           if (parseFrameSlotId(accepted)) {
-            // Safety: never write a synthetic frame slot key onto section.slots
             const parent = parseFrameSlotId(accepted)!;
             targetSlot = frameSlotId(parent);
             const slots = { ...section.slots };
@@ -436,8 +473,15 @@ export function EditorProvider({
           if (targetDef?.kind === "element") {
             slots[accepted] = element;
           } else {
-            const currentValue = Array.isArray(slots[accepted]) ? (slots[accepted] as PageElement[]) : [];
-            slots[accepted] = [...currentValue, element];
+            const currentValue = Array.isArray(slots[accepted]) ? [...(slots[accepted] as PageElement[])] : [];
+            let insertAt = atIndex;
+            if (insertAt === undefined && currentSelection.kind === "element" && currentSelection.slotId === accepted) {
+              const selectedIndex = currentValue.findIndex((item) => item.id === currentSelection.elementId);
+              if (selectedIndex >= 0) insertAt = selectedIndex + 1;
+            }
+            const at = insertAt === undefined ? currentValue.length : Math.max(0, Math.min(insertAt, currentValue.length));
+            currentValue.splice(at, 0, element);
+            slots[accepted] = currentValue;
           }
           return { ...section, slots };
         }),
@@ -903,6 +947,12 @@ export function EditorProvider({
     setSaving(true);
     try {
       const snapshot = pageRef.current;
+      if (persistRef.current) {
+        const next = await persistRef.current(snapshot);
+        setPage(migratePage(next));
+        setDirty(false);
+        return;
+      }
       const response = await fetch(`/api/pages/${snapshot.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -960,6 +1010,7 @@ export function EditorProvider({
       updateTheme,
       addSection,
       insertSavedSection,
+      insertElementBetweenSections,
       duplicateSection,
       removeSection,
       moveSection,
@@ -988,6 +1039,7 @@ export function EditorProvider({
       selectedSlotId,
       canAlign,
       save,
+      editorMode: mode,
     }),
     [
       page,
@@ -1001,6 +1053,7 @@ export function EditorProvider({
       updateTheme,
       addSection,
       insertSavedSection,
+      insertElementBetweenSections,
       duplicateSection,
       removeSection,
       moveSection,
@@ -1029,6 +1082,7 @@ export function EditorProvider({
       selectedSlotId,
       canAlign,
       save,
+      mode,
     ],
   );
 

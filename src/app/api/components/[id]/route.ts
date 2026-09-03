@@ -31,6 +31,7 @@ export async function PUT(request: Request, { params }: Params) {
       responsive: sectionSource.responsive,
       states: sectionSource.states,
       elements: sectionSource.elements,
+      animation: sectionSource.animation,
     },
   });
   return NextResponse.json(saved);

@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { BookmarkPlus, Component, Copy, Trash2, Unlink } from "lucide-react";
+import { BookmarkPlus, Component, Copy, ExternalLink, Trash2, Unlink } from "lucide-react";
+import Link from "next/link";
 import { useEditor } from "@/components/editor/editor-context";
 import { MediaPicker } from "@/components/editor/media-picker";
 import { AnimationEditor } from "@/components/editor/animation-editor";
@@ -153,8 +154,10 @@ function SectionFields({ slotId }: { slotId: string | null }) {
     duplicateSection,
     replaceSection,
     syncComponentInstances,
+    editorMode,
   } = useEditor();
   if (!selectedSection) return null;
+  const isComponentEditor = editorMode === "component";
 
   async function saveComponent() {
     if (!selectedSection) return;
@@ -202,19 +205,27 @@ function SectionFields({ slotId }: { slotId: string | null }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Section component</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {isComponentEditor ? "Component" : "Section component"}
+          </p>
           <h3 className="text-sm font-semibold">{selectedSection.name}</h3>
         </div>
         <div className="flex">
-          <Button size="icon" variant="ghost" onClick={saveComponent}>
-            <BookmarkPlus className="size-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => duplicateSection(selectedSection.id)}>
-            <Copy className="size-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => removeSection(selectedSection.id)}>
-            <Trash2 className="size-4" />
-          </Button>
+          {!isComponentEditor ? (
+            <Button size="icon" variant="ghost" onClick={saveComponent} title="Save as component">
+              <BookmarkPlus className="size-4" />
+            </Button>
+          ) : null}
+          {!isComponentEditor ? (
+            <Button size="icon" variant="ghost" onClick={() => duplicateSection(selectedSection.id)}>
+              <Copy className="size-4" />
+            </Button>
+          ) : null}
+          {!isComponentEditor ? (
+            <Button size="icon" variant="ghost" onClick={() => removeSection(selectedSection.id)}>
+              <Trash2 className="size-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <TextField
@@ -222,7 +233,7 @@ function SectionFields({ slotId }: { slotId: string | null }) {
         value={selectedSection.name}
         onChange={(value) => updateSection(selectedSection.id, { name: value })}
       />
-      {selectedSection.componentId ? (
+      {!isComponentEditor && selectedSection.componentId ? (
         <div className="space-y-2 rounded-md border border-violet-200 bg-violet-50 p-2">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-violet-900">
             <Component className="size-3.5" />
@@ -234,6 +245,12 @@ function SectionFields({ slotId }: { slotId: string | null }) {
             </Button>
             <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={resetInstance}>
               Reset
+            </Button>
+            <Button asChild size="sm" variant="outline" className="h-7 text-[11px]">
+              <Link href={`/admin/component/${selectedSection.componentId}`}>
+                <ExternalLink className="size-3.5" />
+                Edit
+              </Link>
             </Button>
             <Button
               size="sm"

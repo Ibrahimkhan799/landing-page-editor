@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
 import { FrameDropZone } from "@/components/editor/frame-drop-zone";
+import { ElementInsertDrop, SectionGapDrop } from "@/components/editor/insert-gaps";
 import { useEditor } from "@/components/editor/editor-context";
 import { AnimateHost, AnimationStyles } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
@@ -250,9 +251,11 @@ export function EditorCanvas() {
     breakpoint,
     previewState,
     selectedElement,
+    editorMode,
   } = useEditor();
   const width = breakpoint === "mobile" ? 390 : breakpoint === "tablet" ? 768 : 1200;
   const css = nodeStylesheet(collectStyledNodes(page));
+  const isComponent = editorMode === "component";
   const selectedLabel =
     selection.kind === "element"
       ? "Element"
@@ -262,7 +265,9 @@ export function EditorCanvas() {
           ? "Section"
           : selection.kind === "slot"
             ? `Slot · ${selection.slotId}`
-            : "Page";
+            : isComponent
+              ? "Component"
+              : "Page";
 
   return (
     <StylePreviewProvider value={{ breakpoint, previewState, live: false, previewNodeId: selectedElement?.id ?? null }}>
@@ -287,14 +292,15 @@ export function EditorCanvas() {
             <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
               <div style={themeStyle(page.theme)}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+                {!isComponent ? <SectionGapDrop index={0} /> : null}
                 {page.sections.map((section, index) => {
                   const sectionSelected = selection.kind === "section" && selection.sectionId === section.id;
                   const elementIds = slotDefs(section.type)
                     .filter((slot) => slot.kind === "elements")
                     .flatMap((slot) => elementsSlot(section, slot.id).map((element) => element.id));
                   return (
+                    <div key={section.id}>
                     <Overlay
-                      key={section.id}
                       id={section.id}
                       kind="section"
                       label={`${index + 1}. ${section.name}`}
@@ -302,8 +308,8 @@ export function EditorCanvas() {
                       inactive={selectedRefs.some((ref) => ref.sectionId === section.id)}
                       data={{ sectionId: section.id }}
                       onSelect={() => setSelection({ kind: "section", sectionId: section.id })}
-                      onDuplicate={() => duplicateSection(section.id)}
-                      onRemove={() => removeSection(section.id)}
+                      onDuplicate={isComponent ? undefined : () => duplicateSection(section.id)}
+                      onRemove={isComponent ? undefined : () => removeSection(section.id)}
                     >
                       <SortableContext items={elementIds} strategy={verticalListSortingStrategy}>
                         <LandingSection
@@ -333,7 +339,11 @@ export function EditorCanvas() {
                                     interactive={false}
                                     renderChild={(child, parent) => renderNested(child, frameSlotId(parent.id))}
                                     renderFrameEmpty={(parent) => (
-                                      <FrameDropZone sectionId={section.id} parentId={parent.id} />
+                                      <FrameDropZone
+                                        sectionId={section.id}
+                                        parentId={parent.id}
+                                        compact={(parent.children ?? []).length > 0}
+                                      />
                                     )}
                                   />
                                 </AnimateHost>
@@ -341,6 +351,9 @@ export function EditorCanvas() {
                             );
                             return renderNested(element, slotId);
                           }}
+                          renderInsertGap={(slotId, atIndex) => (
+                            <ElementInsertDrop sectionId={section.id} slotId={slotId} index={atIndex} />
+                          )}
                           renderEmptySlot={(slotId) => {
                             const def = slotDefs(section.type).find((slot) => slot.id === slotId) as
                               | SlotDefinition
@@ -353,6 +366,8 @@ export function EditorCanvas() {
                         />
                       </SortableContext>
                     </Overlay>
+                    {!isComponent ? <SectionGapDrop index={index + 1} /> : null}
+                    </div>
                   );
                 })}
               </div>
