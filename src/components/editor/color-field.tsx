@@ -1,9 +1,9 @@
 "use client";
 
 import { HexColorInput, HexColorPicker } from "react-colorful";
+import { MiniInput, SliderRow } from "@/components/editor/compact-controls";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Slider } from "@/components/ui/slider";
 import { hexToRgba, parseCssColor, rgbToHex } from "@/lib/computed-styles";
 import { cn } from "@/lib/utils";
 
@@ -65,29 +65,33 @@ export function ColorPickerBody({
   const alpha = parsed && color ? parsed.alpha : readAlpha(color);
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-1.5">
       <HexColorPicker className="color-picker !w-full" color={hex} onChange={(next) => onChange(paintValue(next, alpha))} />
       <div className="flex items-center gap-1.5">
-        <ColorSwatch color={paintValue(hex, alpha)} className="size-5" />
+        <ColorSwatch color={paintValue(hex, alpha)} className="size-4" />
         <HexColorInput
           prefixed
           color={hex}
           onChange={(next) => onChange(paintValue(next, alpha))}
-          className="h-6 min-w-0 flex-1 rounded border-0 bg-zinc-100 px-2 font-mono text-[11px] uppercase"
+          className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1.5 font-mono text-[11px] uppercase"
         />
-        <span className="w-8 text-right font-mono text-[11px] text-zinc-500">{Math.round(alpha * 100)}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="w-8 text-[10px] uppercase tracking-wide text-zinc-400">Alpha</span>
-        <Slider
-          className="h-5"
-          min={0}
-          max={100}
-          step={1}
-          value={[Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)]}
-          onValueChange={([next]) => onChange(paintValue(hex, (next ?? 0) / 100))}
+        <MiniInput
+          value={Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)}
+          suffix="%"
+          onChange={(next) => {
+            const numeric = Number.parseFloat(next);
+            if (Number.isFinite(numeric)) onChange(paintValue(hex, Math.min(100, Math.max(0, numeric)) / 100));
+          }}
         />
       </div>
+      <SliderRow
+        label="Alpha"
+        value={Math.round((Number.isFinite(alpha) ? alpha : 1) * 100)}
+        min={0}
+        max={100}
+        suffix="%"
+        onChange={(next) => onChange(paintValue(hex, next / 100))}
+      />
       {swatches?.length ? (
         <div className="flex flex-wrap gap-1">
           {[...new Set(swatches)].map((swatch) => (
@@ -145,7 +149,7 @@ export function ColorField({
             <span className={cn("flex-1 font-mono text-[11px]", inherited && "text-zinc-400")}>{shown}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[240px] rounded-lg border-zinc-200 p-3 shadow-xl">
+        <PopoverContent className="editor-popover w-[220px] rounded-lg border-zinc-200 p-2.5 shadow-xl">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[11px] font-medium text-zinc-700">{label}</p>
             {stored ? (
@@ -171,9 +175,12 @@ export function OpacitySlider({
   const numeric = Number.parseFloat(value);
   const current = Number.isFinite(numeric) ? Math.round(numeric * 100) : 100;
   return (
-    <div className="flex items-center gap-2">
-      <Slider min={0} max={100} step={1} value={[current]} onValueChange={([next]) => onChange(String(next / 100))} />
-      <span className="w-8 text-right font-mono text-[11px] text-zinc-500">{current}%</span>
-    </div>
+    <SliderRow
+      value={current}
+      min={0}
+      max={100}
+      suffix="%"
+      onChange={(next) => onChange(String(Math.min(100, Math.max(0, next)) / 100))}
+    />
   );
 }

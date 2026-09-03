@@ -1,10 +1,9 @@
 "use client";
 
 import { ColorPickerBody, ColorSwatch } from "@/components/editor/color-field";
-import { Input } from "@/components/ui/input";
+import { SliderRow } from "@/components/editor/compact-controls";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { rgbToHex } from "@/lib/computed-styles";
 
@@ -38,34 +37,6 @@ export function serializeShadow(shadow: ShadowValue) {
   return `${shadow.inset ? "inset " : ""}${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.spread}px ${shadow.color}`;
 }
 
-function NumberRow({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between">
-        <Label className="text-[11px] text-muted-foreground">{label}</Label>
-        <Input
-          className="h-6 w-14 px-1 text-right text-xs"
-          value={String(value)}
-          onChange={(event) => onChange(Number(event.target.value) || 0)}
-        />
-      </div>
-      <Slider min={min} max={max} step={1} value={[value]} onValueChange={([next]) => onChange(next)} />
-    </div>
-  );
-}
-
 export function ShadowPopover({
   value,
   resolved,
@@ -84,41 +55,41 @@ export function ShadowPopover({
   }
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Shadow</p>
+        <p className="text-[11px] text-zinc-500">Shadow</p>
         {!stored && preview ? (
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Computed</span>
+          <span className="text-[10px] uppercase tracking-wide text-zinc-400">Computed</span>
         ) : null}
       </div>
       <Popover>
         <PopoverTrigger asChild>
           <button type="button" className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left">
             <ColorSwatch color={preview ? parsed.color : ""} />
-            <span className="flex-1 truncate text-xs">
+            <span className="flex-1 truncate text-[11px]">
               {preview ? `${parsed.inset ? "Inner · " : ""}${parsed.x}, ${parsed.y}, ${parsed.blur}` : "None"}
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[240px] space-y-3 p-3">
+        <PopoverContent className="editor-popover w-[228px] space-y-2 p-2.5">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium">Drop shadow</p>
-            <button type="button" className="text-[11px] text-muted-foreground" onClick={() => onChange("")}>
+            <p className="text-[11px] font-medium">Drop shadow</p>
+            <button type="button" className="text-[11px] text-zinc-400" onClick={() => onChange("")}>
               None
             </button>
           </div>
           <div
-            className="grid h-14 place-items-center rounded-md border bg-muted/40"
+            className="grid h-10 place-items-center rounded-sm bg-zinc-100"
             style={{ boxShadow: serializeShadow(parsed) }}
           >
-            <div className="size-8 rounded-md bg-white" />
+            <div className="size-6 rounded-sm bg-white" />
           </div>
-          <NumberRow label="X" value={parsed.x} min={-40} max={40} onChange={(x) => update({ x })} />
-          <NumberRow label="Y" value={parsed.y} min={-40} max={40} onChange={(y) => update({ y })} />
-          <NumberRow label="Blur" value={parsed.blur} min={0} max={80} onChange={(blur) => update({ blur })} />
-          <NumberRow label="Spread" value={parsed.spread} min={-20} max={40} onChange={(spread) => update({ spread })} />
+          <SliderRow label="X" value={parsed.x} min={-40} max={40} onChange={(x) => update({ x })} />
+          <SliderRow label="Y" value={parsed.y} min={-40} max={40} onChange={(y) => update({ y })} />
+          <SliderRow label="Blur" value={parsed.blur} min={0} max={80} onChange={(blur) => update({ blur })} />
+          <SliderRow label="Spread" value={parsed.spread} min={-20} max={40} onChange={(spread) => update({ spread })} />
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Inner shadow</Label>
+            <Label className="text-[11px] text-zinc-500">Inner</Label>
             <Switch checked={parsed.inset} onCheckedChange={(inset) => update({ inset })} />
           </div>
           <ColorPickerBody color={parsed.color} onChange={(color) => update({ color })} />

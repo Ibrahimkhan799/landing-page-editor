@@ -133,12 +133,38 @@ export type InteractionStates = {
   disabled?: StyleProps;
 };
 
+export type AnimationTrigger = "in-view" | "in-view-replay" | "load" | "loop";
+
+export type AnimationPreset =
+  | "fade-in"
+  | "fade-out"
+  | "blur-in"
+  | "scale-in"
+  | "slide-up"
+  | "slide-down"
+  | "slide-left"
+  | "slide-right"
+  | "text-fade"
+  | "text-slide"
+  | "text-blur";
+
+export type AnimationConfig = {
+  preset: AnimationPreset;
+  trigger: AnimationTrigger;
+  duration: number;
+  delay: number;
+  easing: "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear";
+  distance: number;
+  stagger: number;
+};
+
 export type NodeMeta = {
   className?: string;
   htmlId?: string;
   styles?: StyleProps;
   responsive?: StyleOverrides;
   states?: InteractionStates;
+  animation?: AnimationConfig | null;
 };
 
 export type PageElement = NodeMeta & {

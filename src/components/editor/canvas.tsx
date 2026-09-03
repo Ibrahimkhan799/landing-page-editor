@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
 import { useEditor } from "@/components/editor/editor-context";
+import { AnimateHost, AnimationStyles } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
@@ -160,16 +161,38 @@ function Overlay({
           </div>
         ) : null}
       </div>
-      {selected ? (
-        <div
-          data-editor-chrome
-          className="pointer-events-none absolute z-20 font-mono text-[9px] text-zinc-500"
-          style={{ top: box.top + box.height + 3, left: box.left + box.width, transform: "translateX(-100%)" }}
-        >
-          {Math.round(box.width)} × {Math.round(box.height)}
-        </div>
-      ) : null}
       {children}
+    </div>
+  );
+}
+
+function CanvasSizeBadge() {
+  const { selectedElement, selectedSection, selection } = useEditor();
+  const nodeId =
+    selectedElement?.id ??
+    (selection.kind === "section" || selection.kind === "slot" ? selectedSection?.id : null);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!nodeId) return;
+    const read = () => {
+      const el = document.querySelector(`[data-editor-node="${window.CSS.escape(nodeId)}"]`) as HTMLElement | null;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setBox({ width: Math.round(rect.width), height: Math.round(rect.height) });
+    };
+    read();
+    const frame = requestAnimationFrame(read);
+    return () => cancelAnimationFrame(frame);
+  }, [nodeId, selectedElement, selectedSection]);
+
+  if (!nodeId || !box.width) return null;
+  return (
+    <div
+      data-editor-chrome
+      className="pointer-events-none absolute bottom-3 right-3 z-30 font-mono text-[10px] text-zinc-500"
+    >
+      {box.width} × {box.height}
     </div>
   );
 }
@@ -242,11 +265,13 @@ export function EditorCanvas() {
 
   return (
     <StylePreviewProvider value={{ breakpoint, previewState, live: false, previewNodeId: selectedElement?.id ?? null }}>
+      <div className="relative min-h-0 flex-1 bg-[#e5e5e5]">
       <div
-        className="relative min-h-0 flex-1 overflow-auto bg-[#e5e5e5]"
+        className="absolute inset-0 overflow-auto"
         onClick={() => setSelection({ kind: "page" })}
       >
         <AlignToolbar />
+        <AnimationStyles />
         <div className="mx-auto flex items-center justify-between px-6 pb-2 pt-4 text-[11px] text-zinc-500">
           <span>{selectedLabel}</span>
           <span className="font-mono">
@@ -300,7 +325,9 @@ export function EditorCanvas() {
                               onDuplicate={() => duplicateElement(section.id, element.id)}
                               onRemove={() => removeElement(section.id, element.id)}
                             >
-                              <LandingElement element={element} interactive={false} />
+                              <AnimateHost node={element} className="inline-flex max-w-full">
+                                <LandingElement element={element} interactive={false} />
+                              </AnimateHost>
                             </Overlay>
                           )}
                           renderEmptySlot={(slotId) => {
@@ -321,6 +348,8 @@ export function EditorCanvas() {
             </SortableContext>
           </div>
         </div>
+      </div>
+      <CanvasSizeBadge />
       </div>
     </StylePreviewProvider>
   );

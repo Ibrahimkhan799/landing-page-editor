@@ -19,7 +19,9 @@ export function cloneStyleProps(styles?: StyleProps): StyleProps {
   };
 }
 
-export function cloneNodeMeta<T extends NodeMeta>(node: T): Pick<T, "className" | "htmlId" | "styles" | "responsive" | "states"> {
+export function cloneNodeMeta<T extends NodeMeta>(
+  node: T,
+): Pick<T, "className" | "htmlId" | "styles" | "responsive" | "states" | "animation"> {
   return {
     className: node.className,
     htmlId: node.htmlId,
@@ -37,6 +39,7 @@ export function cloneNodeMeta<T extends NodeMeta>(node: T): Pick<T, "className" 
           disabled: cloneStyleProps(node.states.disabled),
         }
       : undefined,
+    animation: node.animation ? { ...node.animation } : node.animation,
   };
 }
 

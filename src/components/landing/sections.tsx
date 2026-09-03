@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { AnimateHost } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
 import { useNodeCss } from "@/components/landing/style-preview";
 import { elementSlot, elementsSlot, textSlot } from "@/lib/slots";
@@ -56,14 +57,16 @@ function SectionShell({
 }) {
   const nodeCss = useNodeCss(node);
   return (
-    <section
-      data-editor-node={node?.id}
-      id={node?.htmlId || id}
-      className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
-      style={{ backgroundColor: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...nodeCss }}
-    >
-      <div className="mx-auto w-full max-w-6xl">{children}</div>
-    </section>
+    <AnimateHost node={node} className="block">
+      <section
+        data-editor-node={node?.id}
+        id={node?.htmlId || id}
+        className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
+        style={{ backgroundColor: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...nodeCss }}
+      >
+        <div className="mx-auto w-full max-w-6xl">{children}</div>
+      </section>
+    </AnimateHost>
   );
 }
 
@@ -86,7 +89,13 @@ export function LandingSection({
   const extras = (id: string) => elementsSlot(section, id);
   const node = (id: string) => elementSlot(section, id);
   const renderEl = (element: import("@/lib/types").PageElement, slotId: string) =>
-    renderElement ? renderElement(element, slotId) : <LandingElement element={element} interactive={interactive} />;
+    renderElement ? (
+      renderElement(element, slotId)
+    ) : (
+      <AnimateHost node={element} className="inline-flex max-w-full">
+        <LandingElement element={element} interactive={interactive} />
+      </AnimateHost>
+    );
   const empty = (id: string) => renderEmptySlot?.(id) ?? null;
   const stack = (slotId: string) => {
     const items = extras(slotId);
@@ -106,6 +115,7 @@ export function LandingSection({
       const links = lines(t("links", str(p.links)));
       const cta = node("cta");
       return (
+        <AnimateHost node={section} className="block">
         <header
           data-editor-node={section.id}
           id={section.htmlId || undefined}
@@ -126,6 +136,7 @@ export function LandingSection({
             {cta ? renderEl(cta, "cta") : empty("cta")}
           </div>
         </header>
+        </AnimateHost>
       );
     }
     case "hero": {
@@ -489,6 +500,7 @@ export function LandingSection({
       );
     case "footer":
       return (
+        <AnimateHost node={section} className="block">
         <footer
           data-editor-node={section.id}
           id={section.htmlId || undefined}
@@ -515,6 +527,7 @@ export function LandingSection({
             {stack("extra")}
           </div>
         </footer>
+        </AnimateHost>
       );
     case "custom":
       return (

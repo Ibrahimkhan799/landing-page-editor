@@ -30,7 +30,7 @@ function PopoverContent({
         avoidCollisions
         sticky="partial"
         className={cn(
-          "z-50 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md outline-none",
+          "editor-ui z-50 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md outline-none",
           className,
         )}
         {...props}

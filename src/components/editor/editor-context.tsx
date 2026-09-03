@@ -490,6 +490,7 @@ export function EditorProvider({
             styles: patch.styles ?? element.styles,
             responsive: patch.responsive ?? element.responsive,
             states: patch.states ?? element.states,
+            animation: patch.animation !== undefined ? patch.animation : element.animation,
           })),
         ),
       );

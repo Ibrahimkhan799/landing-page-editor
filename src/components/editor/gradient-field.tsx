@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { ColorPickerBody, ColorSwatch } from "@/components/editor/color-field";
-import { Input } from "@/components/ui/input";
+import { MiniInput, SliderRow } from "@/components/editor/compact-controls";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -73,6 +73,7 @@ export function GradientField({
 }) {
   const parsed = parseGradient(value);
   const gradient = serialize(parsed.kind, parsed.angle, parsed.stops);
+  const angle = Number.parseInt(parsed.angle, 10) || 0;
 
   function update(patch: Partial<typeof parsed> & { stops?: Stop[] }) {
     const next = { ...parsed, ...patch };
@@ -86,12 +87,12 @@ export function GradientField({
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-1.5">
       {label ? <Label className="text-[11px] text-zinc-500">{label}</Label> : null}
-      <div className="h-8 rounded-sm ring-1 ring-black/5" style={{ backgroundImage: gradient }} />
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="h-6 rounded-[3px] ring-1 ring-black/5" style={{ backgroundImage: gradient }} />
+      <div className="grid grid-cols-2 gap-1">
         <Select value={parsed.kind} onValueChange={(kind) => update({ kind })}>
-          <SelectTrigger className="h-6 text-[11px]">
+          <SelectTrigger className="h-5 border-0 bg-zinc-100 text-[11px] shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -100,28 +101,22 @@ export function GradientField({
           </SelectContent>
         </Select>
         {parsed.kind === "linear" ? (
-          <Input
-            value={parsed.angle}
-            onChange={(event) => update({ angle: event.target.value })}
-            className="h-6 text-[11px]"
+          <MiniInput
+            value={angle}
+            suffix="°"
+            width="w-full"
+            onChange={(next) => update({ angle: `${Number.parseInt(next, 10) || 0}deg` })}
           />
         ) : (
           <div />
         )}
       </div>
       {parsed.kind === "linear" ? (
-        <input
-          type="range"
-          min={0}
-          max={360}
-          value={Number.parseInt(parsed.angle, 10) || 0}
-          onChange={(event) => update({ angle: `${event.target.value}deg` })}
-          className="h-4 w-full accent-zinc-900"
-        />
+        <SliderRow value={angle} min={0} max={360} suffix="°" onChange={(next) => update({ angle: `${next}deg` })} />
       ) : null}
       <button
         type="button"
-        className="h-6 rounded-sm text-[11px] text-zinc-500 hover:bg-zinc-100"
+        className="h-5 text-left text-[10px] uppercase tracking-wide text-zinc-400 hover:text-zinc-700"
         onClick={() =>
           update({
             stops: [...parsed.stops].reverse().map((stop, index) => ({
@@ -131,31 +126,31 @@ export function GradientField({
           })
         }
       >
-        Reverse colors
+        Reverse
       </button>
       <div className="grid gap-1">
         {parsed.stops.map((stop, index) => (
           <div key={`${stop.color}-${index}`} className="flex items-center gap-1">
             <Popover>
               <PopoverTrigger asChild>
-                <button type="button" className="flex h-6 flex-1 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5">
+                <button type="button" className="flex h-5 min-w-0 flex-1 items-center gap-1.5 rounded-[3px] bg-zinc-100 px-1.5">
                   <ColorSwatch color={stop.color} />
-                  <span className="font-mono text-[11px]">{stop.color}</span>
+                  <span className="truncate font-mono text-[10px]">{stop.color}</span>
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-[240px] p-3">
+              <PopoverContent className="editor-popover w-[220px] p-2.5">
                 <ColorPickerBody color={stop.color} onChange={(color) => updateStop(index, { color })} swatches={swatches} />
               </PopoverContent>
             </Popover>
-            <Input
-              value={stop.at}
-              onChange={(event) => updateStop(index, { at: event.target.value })}
-              className="h-6 w-14 px-1 text-center text-[11px]"
+            <MiniInput
+              value={Number.parseFloat(stop.at) || 0}
+              suffix="%"
+              onChange={(next) => updateStop(index, { at: `${Number.parseFloat(next) || 0}%` })}
             />
             {parsed.stops.length > 2 ? (
               <button
                 type="button"
-                className="grid size-6 place-items-center text-zinc-400 hover:text-red-600"
+                className="grid size-5 place-items-center text-zinc-400 hover:text-red-600"
                 onClick={() => update({ stops: parsed.stops.filter((_, stopIndex) => stopIndex !== index) })}
               >
                 <Trash2 className="size-3" />
@@ -167,7 +162,7 @@ export function GradientField({
       {parsed.stops.length < 5 ? (
         <button
           type="button"
-          className="flex h-6 items-center justify-center gap-1 rounded-sm text-[11px] text-zinc-500 hover:bg-zinc-100"
+          className="flex h-5 items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800"
           onClick={() => update({ stops: [...parsed.stops, nextStop(parsed.stops)] })}
         >
           <Plus className="size-3" />

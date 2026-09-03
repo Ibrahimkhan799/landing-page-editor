@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
 import { useNodeCss, usePreviewStateAttr } from "@/components/landing/style-preview";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
@@ -68,7 +69,7 @@ export function LandingElement({
           className={cn(headingSizes[Tag], alignClass, element.className)}
           style={{ fontFamily: "var(--lp-font-heading)", ...nodeCss }}
         >
-          {asString(p.text, "Heading")}
+          {renderAnimatedText(element, asString(p.text, "Heading"))}
         </Tag>
       );
     }
@@ -79,7 +80,7 @@ export function LandingElement({
           className={cn("max-w-2xl text-base leading-7", alignClass, element.className)}
           style={{ color: "var(--lp-muted-fg)", ...nodeCss }}
         >
-          {asString(p.text, "")}
+          {renderAnimatedText(element, asString(p.text, ""))}
         </p>
       );
     case "button": {
@@ -118,11 +119,11 @@ export function LandingElement({
         "aria-disabled": disabled || undefined,
       };
       if (!interactive || disabled) {
-        return <span {...shared}>{asString(p.label, "Button")}</span>;
+        return <span {...shared}>{renderAnimatedText(element, asString(p.label, "Button"))}</span>;
       }
       return (
         <a {...shared} href={href}>
-          {asString(p.label, "Button")}
+          {renderAnimatedText(element, asString(p.label, "Button"))}
         </a>
       );
     }
@@ -305,7 +306,9 @@ export function ElementStack({
   return (
     <div className="mt-6 flex flex-col items-start gap-4">
       {elements.map((element) => (
-        <LandingElement key={element.id} element={element} interactive={interactive} />
+        <AnimateHost key={element.id} node={element} className="inline-flex max-w-full">
+          <LandingElement element={element} interactive={interactive} />
+        </AnimateHost>
       ))}
     </div>
   );

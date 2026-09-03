@@ -1,3 +1,4 @@
+import { AnimationStyles } from "@/components/landing/animate";
 import { LandingSection } from "@/components/landing/sections";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
 import { themeStyle } from "@/lib/theme";
@@ -13,6 +14,7 @@ export function PageRenderer({
   const css = nodeStylesheet(collectStyledNodes(page));
   return (
     <div className="min-h-full overflow-hidden" style={themeStyle(page.theme)}>
+      <AnimationStyles />
       {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
       {page.sections.map((section) => (
         <LandingSection key={section.id} section={section} theme={page.theme} interactive={interactive} />

@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 function Slider({ className, ...props }: ComponentProps<typeof SliderPrimitive.Root>) {
   return (
     <SliderPrimitive.Root
-      className={cn("relative flex w-full touch-none items-center select-none", className)}
+      className={cn("relative flex h-3 w-full touch-none items-center select-none", className)}
       {...props}
     >
-      <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted">
-        <SliderPrimitive.Range className="absolute h-full bg-primary" />
+      <SliderPrimitive.Track className="relative h-px w-full grow overflow-visible rounded-full bg-zinc-200">
+        <SliderPrimitive.Range className="absolute h-px bg-zinc-900" />
       </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className="block size-3.5 rounded-full border border-primary bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      <SliderPrimitive.Thumb className="block size-2 rounded-full border border-zinc-900 bg-white shadow-none focus-visible:outline-none" />
     </SliderPrimitive.Root>
   );
 }

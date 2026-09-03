@@ -86,13 +86,13 @@ body {
 
 .color-picker.react-colorful {
   width: 100%;
-  height: 156px;
-  gap: 12px;
+  height: 128px;
+  gap: 10px;
 }
 
 .color-picker .react-colorful__saturation {
-  border-radius: 6px;
-  margin-bottom: 12px;
+  border-radius: 4px;
+  margin-bottom: 10px;
 }
 
 .editor-ui input:not([type="file"]):not([type="checkbox"]),
@@ -123,14 +123,19 @@ body {
 
 .color-picker .react-colorful__hue,
 .color-picker .react-colorful__alpha {
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
 }
 
 .color-picker .react-colorful__saturation-pointer,
 .color-picker .react-colorful__hue-pointer,
 .color-picker .react-colorful__alpha-pointer {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-width: 2px;
+}
+
+.editor-popover {
+  max-height: min(420px, calc(100vh - 48px));
+  overflow: auto;
 }

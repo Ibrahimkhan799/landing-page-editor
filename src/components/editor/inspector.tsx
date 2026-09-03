@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { BookmarkPlus, Component, Copy, Trash2, Unlink } from "lucide-react";
 import { useEditor } from "@/components/editor/editor-context";
 import { MediaPicker } from "@/components/editor/media-picker";
+import { AnimationEditor } from "@/components/editor/animation-editor";
 import { NodeMetaEditor } from "@/components/editor/style-editor";
 import { ThemePanel } from "@/components/editor/theme-panel";
 import { useComputedStyles } from "@/components/editor/use-computed-styles";
@@ -69,12 +70,15 @@ export function Inspector() {
     <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white">
       <Tabs defaultValue="style" className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-zinc-200 px-2 py-1.5">
-          <TabsList className="grid h-7 w-full grid-cols-3 bg-zinc-100 p-0.5">
+          <TabsList className="grid h-7 w-full grid-cols-4 bg-zinc-100 p-0.5">
             <TabsTrigger value="content" className="h-6 text-[11px]">
               Content
             </TabsTrigger>
             <TabsTrigger value="style" className="h-6 text-[11px]">
               Design
+            </TabsTrigger>
+            <TabsTrigger value="motion" className="h-6 text-[11px]">
+              Motion
             </TabsTrigger>
             <TabsTrigger value="theme" className="h-6 text-[11px]">
               Theme
@@ -97,6 +101,13 @@ export function Inspector() {
           <ScrollArea className="h-full">
             <div className="p-3">
               <StyleTab />
+            </div>
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="motion" className="mt-0 min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <div className="p-3">
+              <MotionTab />
             </div>
           </ScrollArea>
         </TabsContent>
@@ -413,6 +424,26 @@ function ElementFields() {
         );
       })}
     </div>
+  );
+}
+
+function MotionTab() {
+  const { selectedSection, selectedElement, selectedElements, updateSection, updateElementMeta } = useEditor();
+  const node = selectedElement ?? (selectedElements.length ? selectedElements[0] : selectedSection);
+  if (!node || !("id" in node)) {
+    return <p className="text-[12px] text-zinc-400">Select a layer to add motion.</p>;
+  }
+  return (
+    <AnimationEditor
+      node={node}
+      onChange={(animation) => {
+        if (selectedElement && selectedSection) {
+          updateElementMeta(selectedSection.id, selectedElement.id, { animation });
+          return;
+        }
+        if (selectedSection) updateSection(selectedSection.id, { animation });
+      }}
+    />
   );
 }
 

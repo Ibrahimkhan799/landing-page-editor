@@ -158,8 +158,8 @@ export function StyleEditor({
         resolvedBackdrop={live.backdropBlur}
         onChange={patch}
       />
-      <div className="grid gap-1.5">
-        <Label className="text-xs text-muted-foreground">Opacity</Label>
+      <div className="grid gap-1">
+        <Label className="text-[11px] text-zinc-500">Opacity</Label>
         <OpacitySlider value={show("opacity") || "1"} onChange={(opacity) => patch({ opacity })} />
       </div>
       <Separator />
