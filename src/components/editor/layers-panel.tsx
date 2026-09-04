@@ -23,7 +23,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEditor } from "@/components/editor/editor-context";
-import { elementsSlot, elementSlot, findElement, frameSlotId, slotDefs } from "@/lib/slots";
+import { elementsSlot, elementSlot, findElement, frameSlotId, isContainerElement, slotDefs } from "@/lib/slots";
 import type { PageElement, PageSection } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +115,13 @@ function SlotDrop({
     data: { kind: "layer-slot", sectionId, slotId },
   });
   return (
-    <div ref={setNodeRef} className={cn("rounded-sm", isOver && "bg-[#0d99ff]/10")}>
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-sm transition-colors",
+        isOver && "bg-[#0d99ff]/10 ring-1 ring-inset ring-[#0d99ff]/40",
+      )}
+    >
       {children}
     </div>
   );
@@ -137,30 +143,39 @@ function LayerTree({
   const active = selectedRefs.some((ref) => ref.elementId === element.id);
   const childSlot = frameSlotId(element.id);
   const kids = element.children ?? [];
+  const isContainer = element.type === "frame" || element.type === "slot" || element.type === "list";
 
   return (
     <>
       <SortableLayer
         id={`layer-el-${element.id}`}
-        data={{ kind: "layer-element", sectionId, slotId, elementId: element.id }}
+        data={{ kind: "layer-element", sectionId, slotId, elementId: element.id, elementType: element.type }}
         depth={depth}
         label={element.type === "slot" ? String(element.props.name || "slot") : element.type}
         icon={Icon}
         active={active}
         onClick={() => toggleSelectElement({ sectionId, slotId, elementId: element.id }, false)}
       />
-      {kids.length > 0 ? (
-        <SortableContext items={kids.map((child) => `layer-el-${child.id}`)} strategy={verticalListSortingStrategy}>
-          {kids.map((child) => (
-            <LayerTree
-              key={child.id}
-              sectionId={sectionId}
-              slotId={childSlot}
-              element={child}
-              depth={depth + 1}
-            />
-          ))}
-        </SortableContext>
+      {isContainer ? (
+        <SlotDrop sectionId={sectionId} slotId={childSlot}>
+          <SortableContext
+            items={kids.map((child) => `layer-el-${child.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {kids.map((child) => (
+              <LayerTree
+                key={child.id}
+                sectionId={sectionId}
+                slotId={childSlot}
+                element={child}
+                depth={depth + 1}
+              />
+            ))}
+          </SortableContext>
+          {kids.length === 0 ? (
+            <div className="h-4" style={{ marginLeft: 8 + (depth + 1) * 12 }} aria-hidden />
+          ) : null}
+        </SlotDrop>
       ) : null}
     </>
   );
@@ -349,6 +364,24 @@ export function LayersPanel() {
         overData.slotId &&
         overData.elementId
       ) {
+        // Drop onto a container row → nest inside that container.
+        const overSection = page.sections.find((item) => item.id === overData.sectionId);
+        const overEl = overSection ? findElement(overSection, overData.elementId)?.element : null;
+        if (
+          overEl &&
+          isContainerElement(overEl.type) &&
+          overEl.id !== activeData.elementId
+        ) {
+          relocateElement(
+            activeData.sectionId,
+            activeData.slotId,
+            activeData.elementId,
+            overData.sectionId,
+            frameSlotId(overEl.id),
+          );
+          return;
+        }
+
         const same = overData.sectionId === activeData.sectionId && overData.slotId === activeData.slotId;
         if (!same) {
           const section = page.sections.find((item) => item.id === overData.sectionId);
