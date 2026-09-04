@@ -235,10 +235,10 @@ function InsertPanel() {
 
 export function LibrarySidebar() {
   return (
-    <aside className="editor-ui flex h-full w-60 shrink-0 flex-col border-r border-zinc-200 bg-white">
+    <aside className="editor-ui flex h-full w-60 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <Tabs defaultValue="layers" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-zinc-200 px-2 py-1.5">
-          <TabsList className="grid h-7 w-full grid-cols-2 bg-zinc-100 p-0.5">
+        <div className="border-b border-zinc-200 px-2 py-1.5 dark:border-zinc-800">
+          <TabsList className="grid h-7 w-full grid-cols-2 bg-zinc-100 p-0.5 dark:bg-zinc-900">
             <TabsTrigger value="layers" className="h-6 text-[11px]">
               Layers
             </TabsTrigger>

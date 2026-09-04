@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
-import { ExternalLink, Monitor, Smartphone, Tablet, Save, ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ExternalLink, Monitor, Moon, Smartphone, Sun, Tablet, Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { EditorCanvas } from "@/components/editor/canvas";
 import { EditorDnd } from "@/components/editor/editor-dnd";
@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Breakpoint } from "@/lib/types";
+
+const DARK_KEY = "lp-editor-chrome-dark";
 
 export function EditorShell({ backHref }: { backHref?: string }) {
   const {
@@ -41,6 +43,27 @@ export function EditorShell({ backHref }: { backHref?: string }) {
 
   const isComponent = editorMode === "component";
   const backTo = backHref || "/admin";
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    try {
+      setDark(window.localStorage.getItem(DARK_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleDark() {
+    setDark((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(DARK_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (selectedElement?.type !== "button") setPreviewState("default");
@@ -118,9 +141,14 @@ export function EditorShell({ backHref }: { backHref?: string }) {
   ]);
 
   return (
-    <div className="editor-ui flex h-screen flex-col bg-white text-zinc-900">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2">
-        <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600">
+    <div
+      className={cn(
+        "editor-ui flex h-screen flex-col bg-white text-zinc-900",
+        dark && "dark bg-zinc-950 text-zinc-100",
+      )}
+    >
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2 dark:border-zinc-800">
+        <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600 dark:text-zinc-300">
           <Link href={backTo}>
             <ArrowLeft className="size-4" />
           </Link>
@@ -129,14 +157,22 @@ export function EditorShell({ backHref }: { backHref?: string }) {
           <Input
             value={page.name}
             onChange={(event) => updatePage({ name: event.target.value })}
-            className="h-7 max-w-xs border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none focus-visible:border-zinc-200"
+            className="h-7 max-w-xs border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none focus-visible:border-zinc-200 dark:text-zinc-100 dark:focus-visible:border-zinc-700"
           />
           {isComponent ? (
             <p className="px-1.5 text-[10px] uppercase tracking-[0.14em] text-zinc-400">Component editor</p>
           ) : null}
         </div>
         {dirty ? <span className="text-[11px] text-zinc-400">Unsaved</span> : null}
-        <div className="flex rounded-md bg-zinc-100 p-0.5">
+        <button
+          type="button"
+          title={dark ? "Light editor" : "Dark editor"}
+          className="grid size-7 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          onClick={toggleDark}
+        >
+          {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+        </button>
+        <div className="flex rounded-md bg-zinc-100 p-0.5 dark:bg-zinc-900">
           {(
             [
               ["desktop", Monitor],
@@ -150,7 +186,7 @@ export function EditorShell({ backHref }: { backHref?: string }) {
               title={value}
               className={cn(
                 "grid size-7 place-items-center rounded text-zinc-500",
-                breakpoint === value && "bg-white text-zinc-900 shadow-sm",
+                breakpoint === value && "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50",
               )}
               onClick={() => setBreakpoint(value as Breakpoint)}
             >

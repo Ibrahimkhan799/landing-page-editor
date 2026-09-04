@@ -70,10 +70,10 @@ export function Inspector() {
   const multi = selectedElements.length > 1;
 
   return (
-    <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white">
+    <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <Tabs defaultValue="style" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-zinc-200 px-2 py-1.5">
-          <TabsList className="grid h-7 w-full grid-cols-4 bg-zinc-100 p-0.5">
+        <div className="border-b border-zinc-200 px-2 py-1.5 dark:border-zinc-800">
+          <TabsList className="grid h-7 w-full grid-cols-4 bg-zinc-100 p-0.5 dark:bg-zinc-900">
             <TabsTrigger value="content" className="h-6 text-[11px]">
               Content
             </TabsTrigger>

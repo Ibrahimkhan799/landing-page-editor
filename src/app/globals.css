@@ -107,6 +107,16 @@ body {
   font-size: 11px;
 }
 
+.dark.editor-ui input:not([type="file"]):not([type="checkbox"]):not([data-editor-mini]),
+.dark.editor-ui textarea,
+.dark.editor-ui button[role="combobox"],
+.dark .editor-ui input:not([type="file"]):not([type="checkbox"]):not([data-editor-mini]),
+.dark .editor-ui textarea,
+.dark .editor-ui button[role="combobox"] {
+  background-color: #27272a;
+  color: #f4f4f5;
+}
+
 .editor-ui input[data-editor-mini] {
   height: 20px;
   min-height: 20px;
@@ -116,6 +126,12 @@ body {
   box-shadow: none;
   font-size: 10px;
   line-height: 1;
+}
+
+.dark.editor-ui input[data-editor-mini],
+.dark .editor-ui input[data-editor-mini] {
+  background-color: #27272a;
+  color: #f4f4f5;
 }
 
 .editor-ui textarea {

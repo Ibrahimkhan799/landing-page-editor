@@ -578,9 +578,40 @@ export function EditorProvider({
       atIndex?: number,
     ) => {
       mutate((current) => {
-        let moving: PageElement | null = null;
         const sameContainer = fromSectionId === toSectionId && fromSlotId === toSlotId;
 
+        // Same-container reorder: use arrayMove so up/down land on the same index math
+        if (sameContainer && typeof atIndex === "number") {
+          const frameParent = parseFrameSlotId(fromSlotId);
+          return {
+            ...current,
+            sections: current.sections.map((section) => {
+              if (section.id !== fromSectionId) return section;
+              if (frameParent) {
+                return mapElement(section, frameParent, (parent) => {
+                  const kids = parent.children ?? [];
+                  const fromIndex = kids.findIndex((child) => child.id === elementId);
+                  if (fromIndex < 0) return parent;
+                  const to = Math.max(0, Math.min(atIndex, kids.length - 1));
+                  if (fromIndex === to) return parent;
+                  return { ...parent, children: arrayMove(kids, fromIndex, to) };
+                });
+              }
+              const value = section.slots?.[fromSlotId];
+              if (!Array.isArray(value)) return section;
+              const fromIndex = value.findIndex((child) => child.id === elementId);
+              if (fromIndex < 0) return section;
+              const to = Math.max(0, Math.min(atIndex, value.length - 1));
+              if (fromIndex === to) return section;
+              return {
+                ...section,
+                slots: { ...section.slots, [fromSlotId]: arrayMove(value, fromIndex, to) },
+              };
+            }),
+          };
+        }
+
+        let moving: PageElement | null = null;
         const stripped = current.sections.map((section) => {
           if (section.id !== fromSectionId) return section;
           const slots = { ...section.slots };
@@ -621,24 +652,7 @@ export function EditorProvider({
         });
         if (!moving) return current;
 
-        // Adjust index when reordering within the same list (account for removal)
-        let insertAt = atIndex;
-        if (sameContainer && typeof atIndex === "number") {
-          const fromList = (() => {
-            const section = current.sections.find((s) => s.id === fromSectionId);
-            if (!section) return [] as PageElement[];
-            const frameParent = parseFrameSlotId(fromSlotId);
-            if (frameParent) {
-              const found = findElement(section, frameParent);
-              return found?.element.children ?? [];
-            }
-            return Array.isArray(section.slots?.[fromSlotId])
-              ? (section.slots[fromSlotId] as PageElement[])
-              : [];
-          })();
-          const fromIndex = fromList.findIndex((el) => el.id === elementId);
-          if (fromIndex >= 0 && atIndex > fromIndex) insertAt = atIndex - 1;
-        }
+        const insertAt = atIndex;
 
         return {
           ...current,

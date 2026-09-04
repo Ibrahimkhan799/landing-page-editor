@@ -57,7 +57,14 @@ export function createElement(
       type === "heading" || type === "paragraph"
         ? { margin: { top: "0", right: "0", bottom: "0", left: "0" } }
         : type === "frame"
-          ? { display: "flex", flexDirection: "row", justifyContent: "flex-start", alignItems: "center", gap: "12px" }
+          ? {
+              display: "flex",
+              flexDirection: "row",
+              justifyContent: "flex-start",
+              alignItems: "center",
+              gap: "12px",
+              width: "100%",
+            }
           : {},
     children: type === "frame" || type === "slot" || type === "list" ? [] : undefined,
   };
@@ -183,10 +190,18 @@ export function createSection(type: SectionType): PageSection {
       type: "navbar",
       name: "Navbar",
       props: {
-        links: "Features,Pricing,About,Contact",
-        ctaLabel: "Book a call",
-        ctaHref: "#contact",
         sticky: true,
+      },
+      slots: {
+        links: ["Features", "Pricing", "About", "Contact"].map((label) =>
+          createElement("button", {
+            label,
+            href: `#${label.toLowerCase()}`,
+            variant: "ghost",
+            size: "sm",
+          }),
+        ),
+        cta: createElement("button", { label: "Book a call", href: "#contact", variant: "primary", size: "sm" }),
       },
       elements: [],
     }),
@@ -229,7 +244,11 @@ export function createSection(type: SectionType): PageSection {
       name: "Logo cloud",
       props: {
         headline: "Trusted by teams who ship fast",
-        logos: "Northwind,Horizon,Lumen,Cascade,Vertex",
+      },
+      slots: {
+        logos: ["Northwind", "Horizon", "Lumen", "Cascade", "Vertex"].map((label) =>
+          createElement("badge", { text: label, variant: "secondary" }),
+        ),
       },
       elements: [],
     }),
@@ -486,8 +505,17 @@ export function createSection(type: SectionType): PageSection {
       name: "Footer",
       props: {
         blurb: "A landing-page CMS for agencies who sell websites, not hours.",
-        links: "Privacy,Terms,Studio",
         copyright: "© 2026 Northstar Studio. All rights reserved.",
+      },
+      slots: {
+        links: ["Privacy", "Terms", "Studio"].map((label) =>
+          createElement("button", {
+            label,
+            href: `#${label.toLowerCase()}`,
+            variant: "ghost",
+            size: "sm",
+          }),
+        ),
       },
       elements: [],
     }),

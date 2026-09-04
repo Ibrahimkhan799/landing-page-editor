@@ -2,7 +2,7 @@ import type { PageElement, PageSection, SlotDefinition, SlotValue, SectionType }
 
 export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
   navbar: [
-    { id: "links", label: "Links", kind: "text" },
+    { id: "links", label: "Links", kind: "elements", accept: ["button", "badge"] },
     { id: "cta", label: "CTA button", kind: "element", accept: ["button"] },
   ],
   hero: [
@@ -22,7 +22,8 @@ export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
   ],
   logos: [
     { id: "headline", label: "Headline", kind: "text" },
-    { id: "logos", label: "Logos", kind: "text" },
+    { id: "logos", label: "Logos", kind: "elements", accept: ["badge", "button", "image"] },
+    { id: "extra", label: "Extra elements", kind: "elements" },
   ],
   features: [
     { id: "headline", label: "Headline", kind: "text" },
@@ -76,7 +77,7 @@ export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
   ],
   footer: [
     { id: "blurb", label: "Blurb", kind: "text" },
-    { id: "links", label: "Links", kind: "text" },
+    { id: "links", label: "Links", kind: "elements", accept: ["button", "badge"] },
     { id: "copyright", label: "Copyright", kind: "text" },
     { id: "extra", label: "Extra elements", kind: "elements" },
   ],
@@ -142,6 +143,27 @@ export function isContainerElement(type: string | undefined) {
 /** Built-in catalog sections are fixed components — not user-savable templates. */
 export function isBuiltInSectionType(type: string | undefined) {
   return Boolean(type && type !== "custom");
+}
+
+/** On page instances of a saved component, only slots (and their contents) are editable. */
+export function isInstanceSlotEditable(
+  section: PageSection | null | undefined,
+  element: PageElement,
+  ancestors: PageElement[] = [],
+) {
+  if (!section?.componentId) return true;
+  if (element.type === "slot") return true;
+  if (element.textSlot) return true;
+  if (ancestors.some((node) => node.type === "slot")) return true;
+  return false;
+}
+
+/** Prefer full-bleed when width is percentage/fill or the node is a container. */
+export function wantsFullWidth(element: PageElement) {
+  if (isContainerElement(element.type)) return true;
+  const width = element.styles?.width?.trim();
+  if (!width) return false;
+  return width.endsWith("%") || width === "fill" || width === "stretch" || width === "100";
 }
 
 export function findElement(

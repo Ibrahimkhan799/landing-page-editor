@@ -24,7 +24,7 @@ import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
-import { elementsSlot, frameSlotId, isContainerElement, slotDefs } from "@/lib/slots";
+import { elementsSlot, frameSlotId, isContainerElement, isInstanceSlotEditable, slotDefs, wantsFullWidth } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
@@ -41,11 +41,12 @@ const Overlay = forwardRef<
     onRemove?: () => void;
     inactive?: boolean;
     fillWidth?: boolean;
+    locked?: boolean;
     data: Record<string, unknown>;
     children: ReactNode;
   }
 >(function Overlay(
-  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, fillWidth, data, children },
+  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, fillWidth, locked, data, children },
   forwardedRef,
 ) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -54,6 +55,7 @@ const Overlay = forwardRef<
     animateLayoutChanges: () => false,
     transition: null,
     resizeObserverConfig: { disabled: true },
+    disabled: Boolean(locked),
   });
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ top: 0, left: 0, width: 0, height: 0, radius: "0px" });
@@ -139,7 +141,7 @@ const Overlay = forwardRef<
         style={{ top: box.top - 18, left: box.left }}
       >
         <span className="rounded-sm bg-[#0d99ff] px-1 text-[9px] font-medium leading-4 text-white">{label}</span>
-        {chrome ? (
+        {chrome && !locked ? (
           <div className="ml-0.5 flex items-center rounded-sm bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
             <button
               type="button"
@@ -177,6 +179,8 @@ const Overlay = forwardRef<
               </button>
             ) : null}
           </div>
+        ) : locked ? (
+          <span className="ml-0.5 rounded-sm bg-zinc-400 px-1 text-[9px] font-medium leading-4 text-white">locked</span>
         ) : null}
       </div>
       {children}
@@ -336,28 +340,45 @@ export function EditorCanvas() {
                           theme={page.theme}
                           interactive={false}
                           renderElement={(element: PageElement, slotId: string) => {
-                            const renderNested = (node: PageElement, nodeSlotId: string): ReactNode => (
+                            const instanceLocked = !isComponent && Boolean(section.componentId);
+                            const renderNested = (
+                              node: PageElement,
+                              nodeSlotId: string,
+                              ancestors: PageElement[] = [],
+                            ): ReactNode => {
+                              const editable = !instanceLocked || isInstanceSlotEditable(section, node, ancestors);
+                              const fill = wantsFullWidth(node) || isContainerElement(node.type);
+                              return (
                               <Overlay
                                 id={node.id}
                                 kind="element"
-                                label={node.textSlot ? `${node.type} · slot` : node.type}
+                                label={
+                                  node.textSlot
+                                    ? `${node.type} · slot`
+                                    : node.type === "slot"
+                                      ? `slot · ${String(node.props.name || "Slot")}`
+                                      : node.type
+                                }
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
-                                fillWidth={isContainerElement(node.type)}
+                                fillWidth={fill}
+                                locked={!editable}
                                 data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
-                                onSelect={(event) =>
+                                onSelect={(event) => {
+                                  if (!editable && !node.textSlot) {
+                                    setSelection({ kind: "section", sectionId: section.id });
+                                    return;
+                                  }
                                   toggleSelectElement(
                                     { sectionId: section.id, slotId: nodeSlotId, elementId: node.id },
                                     event.shiftKey || event.metaKey,
-                                  )
-                                }
-                                onDuplicate={() => duplicateElement(section.id, node.id)}
-                                onRemove={() => removeElement(section.id, node.id)}
+                                  );
+                                }}
+                                onDuplicate={editable ? () => duplicateElement(section.id, node.id) : undefined}
+                                onRemove={editable ? () => removeElement(section.id, node.id) : undefined}
                               >
                                 <AnimateHost
                                   node={node}
-                                  className={
-                                    isContainerElement(node.type) ? "block min-w-0 w-full" : "inline-flex max-w-full"
-                                  }
+                                  className={fill ? "block min-w-0 w-full" : "inline-flex max-w-full"}
                                 >
                                   <LandingElement
                                     element={node}
@@ -370,25 +391,33 @@ export function EditorCanvas() {
                                         {children}
                                       </SortableContext>
                                     )}
-                                    renderChild={(child, parent) => renderNested(child, frameSlotId(parent.id))}
-                                    renderFrameEmpty={(parent) => (
-                                      <FrameDropZone
-                                        sectionId={section.id}
-                                        parentId={parent.id}
-                                        compact={(parent.children ?? []).length > 0}
-                                        label={
-                                          parent.type === "slot"
-                                            ? "Drop into slot"
-                                            : parent.type === "list"
-                                              ? "Drop list template"
-                                              : undefined
-                                        }
-                                      />
-                                    )}
+                                    renderChild={(child, parent) =>
+                                      renderNested(child, frameSlotId(parent.id), [...ancestors, parent])
+                                    }
+                                    renderFrameEmpty={(parent) =>
+                                      !instanceLocked ||
+                                      parent.type === "slot" ||
+                                      ancestors.some((a) => a.type === "slot") ||
+                                      isInstanceSlotEditable(section, parent, ancestors) ? (
+                                        <FrameDropZone
+                                          sectionId={section.id}
+                                          parentId={parent.id}
+                                          compact={(parent.children ?? []).length > 0}
+                                          label={
+                                            parent.type === "slot"
+                                              ? "Drop into slot"
+                                              : parent.type === "list"
+                                                ? "Drop list template"
+                                                : undefined
+                                          }
+                                        />
+                                      ) : null
+                                    }
                                   />
                                 </AnimateHost>
                               </Overlay>
-                            );
+                              );
+                            };
                             return renderNested(element, slotId);
                           }}
                           renderInsertGap={(slotId, atIndex) => (
