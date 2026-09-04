@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { nanoid } from "nanoid";
 import { BookmarkPlus, Component, Copy, ExternalLink, Trash2, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useEditor } from "@/components/editor/editor-context";
@@ -26,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { slotDefs, textSlot } from "@/lib/slots";
-import { cloneSection } from "@/lib/defaults";
+import { cloneSection, createBlankBlockSection } from "@/lib/defaults";
 import { editingBucket, mergeStyles, resolveNodeStyles } from "@/lib/node-styles";
 import type { InteractionState } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -146,6 +148,7 @@ function PageFields() {
 
 function SectionFields({ slotId }: { slotId: string | null }) {
   const {
+    page,
     selectedSection,
     updateSection,
     updateSectionProp,
@@ -247,7 +250,7 @@ function SectionFields({ slotId }: { slotId: string | null }) {
               Reset
             </Button>
             <Button asChild size="sm" variant="outline" className="h-7 text-[11px]">
-              <Link href={`/admin/component/${selectedSection.componentId}`}>
+              <Link href={`/admin/component/${selectedSection.componentId}?from=${encodeURIComponent(page.id)}`}>
                 <ExternalLink className="size-3.5" />
                 Edit
               </Link>
@@ -343,8 +346,56 @@ function SectionFields({ slotId }: { slotId: string | null }) {
 }
 
 function ElementFields() {
-  const { selectedSection, selectedElement, updateElementProp, removeElement } = useEditor();
+  const { page, selectedSection, selectedElement, updateElementProp, updateElement, removeElement } = useEditor();
+  const router = useRouter();
   if (!selectedSection || !selectedElement) return null;
+
+  async function saveAsComponent() {
+    if (!selectedSection || !selectedElement) return;
+    const name = window.prompt("Name this component", selectedElement.type);
+    if (!name) return;
+    const block = createBlankBlockSection({
+      name,
+      element: { ...selectedElement, id: nanoid(10) },
+    });
+    const { id: _id, ...section } = block;
+    const response = await fetch("/api/components", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, section }),
+    });
+    if (!response.ok) {
+      toast.error("Could not save component");
+      return;
+    }
+    const saved = await response.json();
+    toast.success("Component created", {
+      action: {
+        label: "Edit",
+        onClick: () => router.push(`/admin/component/${saved.id}?from=${encodeURIComponent(page.id)}`),
+      },
+    });
+  }
+
+  function ensureTextSlot() {
+    if (!selectedSection || !selectedElement) return;
+    const prop =
+      typeof selectedElement.props.label === "string"
+        ? "label"
+        : typeof selectedElement.props.text === "string"
+          ? "text"
+          : typeof selectedElement.props.title === "string"
+            ? "title"
+            : null;
+    if (!prop) {
+      toast.message("No text property on this element");
+      return;
+    }
+    const label = window.prompt("Slot name", selectedElement.textSlot?.label || prop) || prop;
+    updateElement(selectedSection.id, selectedElement.id, {
+      textSlot: { id: selectedElement.textSlot?.id || nanoid(8), label, prop },
+    });
+  }
 
   return (
     <div className="space-y-3">
@@ -353,10 +404,26 @@ function ElementFields() {
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Element</p>
           <h3 className="text-sm font-semibold capitalize">{selectedElement.type}</h3>
         </div>
-        <Button size="icon" variant="ghost" onClick={() => removeElement(selectedSection.id, selectedElement.id)}>
-          <Trash2 className="size-4" />
-        </Button>
+        <div className="flex">
+          <Button size="icon" variant="ghost" title="Create component" onClick={() => void saveAsComponent()}>
+            <BookmarkPlus className="size-4" />
+          </Button>
+          <Button size="icon" variant="ghost" onClick={() => removeElement(selectedSection.id, selectedElement.id)}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
+      {selectedElement.textSlot ? (
+        <p className="rounded-md border border-teal-200 bg-teal-50 px-2 py-1.5 text-[11px] text-teal-800">
+          Text slot · {selectedElement.textSlot.label} ({selectedElement.textSlot.prop})
+        </p>
+      ) : typeof selectedElement.props.text === "string" ||
+        typeof selectedElement.props.label === "string" ||
+        typeof selectedElement.props.title === "string" ? (
+        <Button size="sm" variant="outline" className="h-7 w-full text-[11px]" onClick={ensureTextSlot}>
+          Create text slot
+        </Button>
+      ) : null}
       {selectedElement.type === "button" ? (
         <Field label="Disabled">
           <Switch
@@ -367,8 +434,22 @@ function ElementFields() {
           />
         </Field>
       ) : null}
+      {selectedElement.type === "list" ? (
+        <TextField
+          label="List items (JSON)"
+          value={JSON.stringify(selectedElement.props.items ?? [], null, 2)}
+          multiline
+          onChange={(next) => {
+            try {
+              updateElementProp(selectedSection.id, selectedElement.id, "items", JSON.parse(next));
+            } catch {
+              /* keep typing */
+            }
+          }}
+        />
+      ) : null}
       {Object.entries(selectedElement.props).map(([key, value]) => {
-        if (key === "disabled") return null;
+        if (key === "disabled" || key === "items") return null;
         if (key === "src" && (selectedElement.type === "image" || selectedElement.type === "video")) {
           return (
             <MediaPicker
@@ -388,6 +469,18 @@ function ElementFields() {
                 onCheckedChange={(checked) => updateElementProp(selectedSection.id, selectedElement.id, key, checked)}
               />
             </Field>
+          );
+        }
+        if (typeof value === "number") {
+          return (
+            <TextField
+              key={key}
+              label={key}
+              value={String(value)}
+              onChange={(next) =>
+                updateElementProp(selectedSection.id, selectedElement.id, key, Number(next) || 0)
+              }
+            />
           );
         }
         if (key === "variant") {
@@ -428,6 +521,23 @@ function ElementFields() {
                 </SelectContent>
               </Select>
             </Field>
+          );
+        }
+        if (Array.isArray(value) || (value && typeof value === "object")) {
+          return (
+            <TextField
+              key={key}
+              label={`${key} (JSON)`}
+              value={JSON.stringify(value, null, 2)}
+              multiline
+              onChange={(next) => {
+                try {
+                  updateElementProp(selectedSection.id, selectedElement.id, key, JSON.parse(next));
+                } catch {
+                  /* keep typing */
+                }
+              }}
+            />
           );
         }
         return (

@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
+import { CanvasEditorContextMenu } from "@/components/editor/editor-context-menu";
 import { FrameDropZone } from "@/components/editor/frame-drop-zone";
 import { ElementInsertDrop, SectionGapDrop } from "@/components/editor/insert-gaps";
 import { useEditor } from "@/components/editor/editor-context";
@@ -23,34 +24,29 @@ import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
-import { elementsSlot, frameSlotId, slotDefs } from "@/lib/slots";
+import { elementsSlot, frameSlotId, isContainerElement, slotDefs } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
 
-function Overlay({
-  id,
-  kind,
-  selected,
-  label,
-  onSelect,
-  onDuplicate,
-  onRemove,
-  inactive,
-  data,
-  children,
-}: {
-  id: string;
-  kind: "section" | "element";
-  selected: boolean;
-  label: string;
-  onSelect: (event: MouseEvent) => void;
-  onDuplicate?: () => void;
-  onRemove?: () => void;
-  inactive?: boolean;
-  data: Record<string, unknown>;
-  children: ReactNode;
-}) {
+const Overlay = forwardRef<
+  HTMLDivElement,
+  {
+    id: string;
+    kind: "section" | "element";
+    selected: boolean;
+    label: string;
+    onSelect: (event: MouseEvent) => void;
+    onDuplicate?: () => void;
+    onRemove?: () => void;
+    inactive?: boolean;
+    data: Record<string, unknown>;
+    children: ReactNode;
+  }
+>(function Overlay(
+  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, data, children },
+  forwardedRef,
+) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { kind, ...data },
@@ -88,7 +84,13 @@ function Overlay({
       ref={(node) => {
         setNodeRef(node);
         boxRef.current = node;
+        if (typeof forwardedRef === "function") forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
       }}
+      data-editor-overlay={kind}
+      data-section-id={typeof data.sectionId === "string" ? data.sectionId : undefined}
+      data-slot-id={typeof data.slotId === "string" ? data.slotId : undefined}
+      data-element-id={typeof data.elementId === "string" ? data.elementId : undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn("group/overlay relative overflow-visible", isDragging && "z-30 opacity-40")}
       onClick={(event) => {
@@ -166,7 +168,9 @@ function Overlay({
       {children}
     </div>
   );
-}
+});
+
+Overlay.displayName = "Overlay";
 
 function CanvasSizeBadge() {
   const { selectedElement, selectedSection, selection } = useEditor();
@@ -289,6 +293,7 @@ export function EditorCanvas() {
             className="mx-auto overflow-visible bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_80px_rgba(15,23,42,0.08)]"
             style={{ maxWidth: width }}
           >
+            <CanvasEditorContextMenu pageId={page.id}>
             <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
               <div style={themeStyle(page.theme)}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
@@ -321,7 +326,7 @@ export function EditorCanvas() {
                               <Overlay
                                 id={node.id}
                                 kind="element"
-                                label={node.type}
+                                label={node.textSlot ? `${node.type} · slot` : node.type}
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
                                 data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
                                 onSelect={(event) =>
@@ -333,7 +338,10 @@ export function EditorCanvas() {
                                 onDuplicate={() => duplicateElement(section.id, node.id)}
                                 onRemove={() => removeElement(section.id, node.id)}
                               >
-                                <AnimateHost node={node} className={node.type === "frame" ? "block w-full" : "inline-flex max-w-full"}>
+                                <AnimateHost
+                                  node={node}
+                                  className={isContainerElement(node.type) ? "block w-full" : "inline-flex max-w-full"}
+                                >
                                   <LandingElement
                                     element={node}
                                     interactive={false}
@@ -343,6 +351,13 @@ export function EditorCanvas() {
                                         sectionId={section.id}
                                         parentId={parent.id}
                                         compact={(parent.children ?? []).length > 0}
+                                        label={
+                                          parent.type === "slot"
+                                            ? "Drop into slot"
+                                            : parent.type === "list"
+                                              ? "Drop list template"
+                                              : undefined
+                                        }
                                       />
                                     )}
                                   />
@@ -372,6 +387,7 @@ export function EditorCanvas() {
                 })}
               </div>
             </SortableContext>
+            </CanvasEditorContextMenu>
           </div>
         </div>
       </div>

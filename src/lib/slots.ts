@@ -132,7 +132,11 @@ export function frameSlotId(parentId: string) {
 
 export function parseFrameSlotId(slotId: string) {
   if (!slotId.startsWith("frame:")) return null;
-  return slotId.slice(6);
+  return slotId.slice("frame:".length);
+}
+
+export function isContainerElement(type: string | undefined) {
+  return type === "frame" || type === "slot" || type === "list";
 }
 
 export function findElement(

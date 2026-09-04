@@ -47,15 +47,31 @@ export function createElement(
   type: ElementType,
   props: Record<string, unknown> = {},
 ): PageElement {
-  return {
+  const base: PageElement = {
     id: nanoid(10),
     type,
     props: { ...defaultElementProps(type), ...props },
     className: "",
     htmlId: "",
-    styles: {},
-    children: type === "frame" ? [] : undefined,
+    styles:
+      type === "heading" || type === "paragraph"
+        ? { margin: { top: "0", right: "0", bottom: "0", left: "0" } }
+        : {},
+    children: type === "frame" || type === "slot" || type === "list" ? [] : undefined,
   };
+  if (type === "list") {
+    base.children = [
+      {
+        ...createElement("frame"),
+        children: [
+          createElement("badge", { text: "{{index}}" }),
+          createElement("heading", { text: "{{title}}", level: "h3" }),
+          createElement("paragraph", { text: "{{body}}" }),
+        ],
+      },
+    ];
+  }
+  return base;
 }
 
 export function defaultElementProps(type: ElementType): Record<string, unknown> {
@@ -104,6 +120,18 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
       };
     case "frame":
       return { label: "" };
+    case "slot":
+      return { name: "Slot", slotKind: "elements" };
+    case "list":
+      return {
+        columns: 3,
+        gap: "16px",
+        items: [
+          { title: "Item one", body: "Describe this item." },
+          { title: "Item two", body: "Describe this item." },
+          { title: "Item three", body: "Describe this item." },
+        ],
+      };
     default:
       return {};
   }
@@ -116,6 +144,7 @@ export function cloneElementNode(element: PageElement): PageElement {
     id: nanoid(10),
     props: { ...element.props },
     styles: cloneStyleProps(element.styles),
+    textSlot: element.textSlot ? { ...element.textSlot } : element.textSlot,
     children: element.children?.map(cloneElementNode),
   };
 }
@@ -141,6 +170,7 @@ export function cloneSection(
     name: options?.name ?? `${section.name} copy`,
     props: { ...section.props },
     slots,
+    slotOverrides: section.slotOverrides ? { ...section.slotOverrides } : undefined,
     styles: cloneStyleProps(section.styles),
   };
 }
@@ -568,5 +598,28 @@ export const ELEMENT_CATALOG: {
   { type: "video", label: "Video", description: "Embedded clip" },
   { type: "card", label: "Card", description: "Title, body, footer" },
   { type: "frame", label: "Frame", description: "Layout box" },
+  { type: "slot", label: "Element slot", description: "Fillable drop target in components" },
+  { type: "list", label: "List / ForEach", description: "Repeat a template for each item" },
   { type: "separator", label: "Separator", description: "Horizontal rule" },
 ];
+
+/** Empty freeform section used for blank components and between-section blocks. */
+export function createBlankBlockSection(options?: {
+  name?: string;
+  element?: PageElement;
+}): PageSection {
+  const element = options?.element;
+  return {
+    id: nanoid(10),
+    type: "custom",
+    name: options?.name ?? "Block",
+    props: { background: "plain", freeform: true, spacing: "none" },
+    className: "",
+    htmlId: "",
+    styles: {
+      padding: { top: "0", right: "0", bottom: "0", left: "0" },
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
+    },
+    slots: { body: element ? [element] : [] },
+  };
+}

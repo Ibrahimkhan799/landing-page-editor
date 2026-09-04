@@ -55,12 +55,15 @@ function SectionShell({
   muted,
   id,
   node,
+  contained = true,
 }: {
   children: ReactNode;
   className?: string;
   muted?: boolean;
   id?: string;
   node?: PageSection;
+  /** When false, skip default section padding and max-width wrapper (freeform blocks). */
+  contained?: boolean;
 }) {
   const nodeCss = useNodeCss(node);
   return (
@@ -68,10 +71,10 @@ function SectionShell({
       <section
         data-editor-node={node?.id}
         id={node?.htmlId || id}
-        className={cn("px-6 py-16 md:px-10 md:py-24", className, node?.className)}
+        className={cn(contained && "px-6 py-16 md:px-10 md:py-24", className, node?.className)}
         style={{ backgroundColor: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...nodeCss }}
       >
-        <div className="mx-auto w-full max-w-6xl">{children}</div>
+        {contained ? <div className="mx-auto w-full max-w-6xl">{children}</div> : children}
       </section>
     </AnimateHost>
   );
@@ -542,13 +545,15 @@ export function LandingSection({
       );
     case "custom": {
       const plain = str(p.background, "muted") === "plain";
+      const freeform = plain || bool(p.freeform, false) || str(p.spacing) === "none";
       return (
         <SectionShell
           node={section}
           muted={!plain && str(p.background, "muted") === "muted"}
-          className={plain ? "py-6 md:py-8" : undefined}
+          contained={!freeform}
+          className={freeform ? "py-0 px-0 md:py-0 md:px-0" : undefined}
         >
-          <div className="space-y-4">{stack("body")}</div>
+          <div className={freeform ? "w-full" : "space-y-4"}>{stack("body", { tight: true })}</div>
         </SectionShell>
       );
     }

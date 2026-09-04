@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
-import { Box, Layers, Puzzle, Type } from "lucide-react";
+import { Box, Layers, Plus, Puzzle, Trash2, Type } from "lucide-react";
 import { toast } from "sonner";
 import { LayersPanel } from "@/components/editor/layers-panel";
 import { Button } from "@/components/ui/button";
@@ -47,15 +48,21 @@ function DraggableItem({
 }
 
 function InsertPanel() {
-  const { addSection, addElement, selectedSection, insertSavedSection, editorMode } = useEditor();
+  const { page, addSection, addElement, selectedSection, insertSavedSection, editorMode } = useEditor();
   const [components, setComponents] = useState<SavedComponent[]>([]);
   const isComponent = editorMode === "component";
 
+  async function refreshComponents() {
+    try {
+      const response = await fetch("/api/components");
+      if (response.ok) setComponents(await response.json());
+    } catch {
+      /* ignore */
+    }
+  }
+
   useEffect(() => {
-    fetch("/api/components")
-      .then((response) => response.json())
-      .then(setComponents)
-      .catch(() => undefined);
+    void refreshComponents();
   }, []);
 
   function addLibraryElement(type: ElementType) {
@@ -64,6 +71,35 @@ function InsertPanel() {
       return;
     }
     addElement(selectedSection.id, type);
+  }
+
+  async function createBlankComponent() {
+    const name = window.prompt("Component name", "New component");
+    if (!name) return;
+    const response = await fetch("/api/components", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, blank: true }),
+    });
+    if (!response.ok) {
+      toast.error("Could not create component");
+      return;
+    }
+    const saved = await response.json();
+    await refreshComponents();
+    toast.success("Blank component created");
+    window.location.href = `/admin/component/${saved.id}?from=${encodeURIComponent(page.id)}`;
+  }
+
+  async function removeComponent(id: string, name: string) {
+    if (!window.confirm(`Delete component “${name}”? Instances on pages will keep their last snapshot.`)) return;
+    const response = await fetch(`/api/components/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      toast.error("Could not delete");
+      return;
+    }
+    setComponents((current) => current.filter((item) => item.id !== id));
+    toast.success("Component deleted");
   }
 
   return (
@@ -142,9 +178,18 @@ function InsertPanel() {
         <TabsContent value="saved" className="mt-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="space-y-1 p-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="mb-1 h-7 w-full justify-start gap-1.5 text-[11px]"
+                onClick={() => void createBlankComponent()}
+              >
+                <Plus className="size-3.5" />
+                New blank component
+              </Button>
               {components.length === 0 ? (
                 <p className="px-1 text-[11px] text-zinc-400">
-                  Save a section from the inspector to reuse it as a component.
+                  Create a blank component, or right-click a section/element and choose Create component.
                 </p>
               ) : (
                 components.map((component) => (
@@ -158,7 +203,9 @@ function InsertPanel() {
                     </div>
                     <div className="flex shrink-0">
                       <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-[11px]">
-                        <a href={`/admin/component/${component.id}`}>Edit</a>
+                        <Link href={`/admin/component/${component.id}?from=${encodeURIComponent(page.id)}`}>
+                          Edit
+                        </Link>
                       </Button>
                       <Button
                         size="sm"
@@ -167,6 +214,15 @@ function InsertPanel() {
                         onClick={() => insertSavedSection(component)}
                       >
                         Insert
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-6 text-zinc-400 hover:text-red-600"
+                        title="Delete"
+                        onClick={() => void removeComponent(component.id, component.name)}
+                      >
+                        <Trash2 className="size-3" />
                       </Button>
                     </div>
                   </div>

@@ -11,10 +11,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cloneElementNode, cloneSection, createElement, createSection } from "@/lib/defaults";
+import { cloneElementNode, cloneSection, createBlankBlockSection, createElement, createSection } from "@/lib/defaults";
 import { migratePage } from "@/lib/migrate";
 import { alignStylePatch, applyStyleBucket, cloneStyleProps, editingBucket, mergeStyles } from "@/lib/node-styles";
-import { defaultElementsSlot, findElement, frameSlotId, parseFrameSlotId, slotDefs } from "@/lib/slots";
+import { defaultElementsSlot, findElement, frameSlotId, isContainerElement, parseFrameSlotId, slotDefs } from "@/lib/slots";
 import type {
   AlignKind,
   Breakpoint,
@@ -281,10 +281,7 @@ export function EditorProvider({
   const insertElementBetweenSections = useCallback(
     (type: ElementType, atIndex: number) => {
       const element = createElement(type);
-      const section = createSection("custom");
-      section.name = "Block";
-      section.props = { background: "plain" };
-      section.slots = { body: [element] };
+      const section = createBlankBlockSection({ name: "Block", element });
       mutate((current) => {
         const sections = [...current.sections];
         sections.splice(atIndex, 0, section);
@@ -366,6 +363,7 @@ export function EditorProvider({
             if (section.id === sourceSectionId || section.componentId !== componentId) return section;
             const copy = cloneSection(source, { id: section.id, name: section.name });
             copy.componentId = componentId;
+            copy.slotOverrides = section.slotOverrides;
             return copy;
           }),
         };
@@ -401,7 +399,7 @@ export function EditorProvider({
           const currentSelection = selectionRef.current;
           const selectedFrameId =
             currentSelection.kind === "element" && currentSelection.sectionId === sectionId
-              ? findElement(section, currentSelection.elementId)?.element.type === "frame"
+              ? isContainerElement(findElement(section, currentSelection.elementId)?.element.type)
                 ? currentSelection.elementId
                 : parseFrameSlotId(currentSelection.slotId)
               : currentSelection.kind === "slot" && currentSelection.sectionId === sectionId
@@ -663,9 +661,20 @@ export function EditorProvider({
   const updateElementProp = useCallback(
     (sectionId: string, elementId: string, key: string, value: unknown) => {
       mutate((current) =>
-        mapSection(current, sectionId, (section) =>
-          mapElement(section, elementId, (element) => ({ ...element, props: { ...element.props, [key]: value } })),
-        ),
+        mapSection(current, sectionId, (section) => {
+          const mapped = mapElement(section, elementId, (element) => {
+            const next = { ...element, props: { ...element.props, [key]: value } };
+            return next;
+          });
+          const found = findElement(mapped, elementId)?.element;
+          if (found?.textSlot && found.textSlot.prop === key && typeof value === "string") {
+            return {
+              ...mapped,
+              slotOverrides: { ...(mapped.slotOverrides ?? {}), [found.textSlot.id]: value },
+            };
+          }
+          return mapped;
+        }),
       );
     },
     [mutate],

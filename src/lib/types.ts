@@ -13,7 +13,9 @@ export type ElementType =
   | "video"
   | "separator"
   | "card"
-  | "frame";
+  | "frame"
+  | "slot"
+  | "list";
 
 export type SectionType =
   | "navbar"
@@ -180,11 +182,20 @@ export type NodeMeta = {
   animation?: AnimationConfig | null;
 };
 
+/** Marks a prop on an element as an overridable text slot when used as a component instance. */
+export type ElementTextSlot = {
+  id: string;
+  label: string;
+  prop: string;
+};
+
 export type PageElement = NodeMeta & {
   id: string;
   type: ElementType;
   props: Record<string, unknown>;
   children?: PageElement[];
+  /** When set, this element's prop becomes a fillable text slot on component instances. */
+  textSlot?: ElementTextSlot | null;
 };
 
 export type SlotValue = string | PageElement | PageElement[] | null;
@@ -197,6 +208,8 @@ export type PageSection = NodeMeta & {
   slots?: Record<string, SlotValue>;
   elements?: PageElement[];
   componentId?: string;
+  /** Instance overrides for component text/element slots (keyed by slot id). */
+  slotOverrides?: Record<string, SlotValue>;
 };
 
 export type LandingPage = {
@@ -215,6 +228,7 @@ export type SavedComponent = {
   id: string;
   name: string;
   createdAt: string;
+  updatedAt?: string;
   section: Omit<PageSection, "id">;
 };
 

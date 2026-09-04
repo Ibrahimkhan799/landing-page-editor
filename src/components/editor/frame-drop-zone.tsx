@@ -9,10 +9,12 @@ export function FrameDropZone({
   sectionId,
   parentId,
   compact,
+  label,
 }: {
   sectionId: string;
   parentId: string;
   compact?: boolean;
+  label?: string;
 }) {
   const { selection, setSelection } = useEditor();
   const slotId = frameSlotId(parentId);
@@ -38,7 +40,7 @@ export function FrameDropZone({
           : "border-zinc-300/80 text-zinc-400 hover:border-[#0d99ff]/70",
       )}
     >
-      {compact ? "Add inside" : "Drop elements here"}
+      {compact ? "Add inside" : label || "Drop elements here"}
     </button>
   );
 }

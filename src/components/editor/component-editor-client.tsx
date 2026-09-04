@@ -8,9 +8,11 @@ import type { LandingPage } from "@/lib/types";
 export function ComponentEditorClient({
   componentId,
   initialPage,
+  fromPageId,
 }: {
   componentId: string;
   initialPage: LandingPage;
+  fromPageId?: string | null;
 }) {
   const persistPage = useCallback(
     async (page: LandingPage) => {
@@ -21,7 +23,8 @@ export function ComponentEditorClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: page.name,
-          section: { ...section, componentId: undefined },
+          section: { ...section, componentId: undefined, slotOverrides: undefined },
+          syncInstances: true,
         }),
       });
       if (!response.ok) throw new Error("Save failed");
@@ -36,9 +39,11 @@ export function ComponentEditorClient({
     [componentId],
   );
 
+  const backHref = fromPageId ? `/admin/editor/${fromPageId}` : "/admin";
+
   return (
     <EditorProvider initialPage={initialPage} persistPage={persistPage} mode="component">
-      <EditorShell />
+      <EditorShell backHref={backHref} />
     </EditorProvider>
   );
 }

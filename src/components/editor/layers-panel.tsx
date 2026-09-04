@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 function elementIcon(type: PageElement["type"]) {
   if (type === "heading" || type === "paragraph") return Type;
-  if (type === "frame") return Frame;
+  if (type === "frame" || type === "slot" || type === "list") return Frame;
   return Box;
 }
 
