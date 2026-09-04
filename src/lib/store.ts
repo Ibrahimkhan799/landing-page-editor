@@ -1,8 +1,9 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { createDemoPage } from "@/lib/defaults";
+import { createDemoPage, cloneSection } from "@/lib/defaults";
+import { applySlotOverrides, collectSlotOverrides } from "@/lib/component-slots";
 import { migratePage } from "@/lib/migrate";
-import type { LandingPage, SavedComponent } from "@/lib/types";
+import type { LandingPage, PageSection, SavedComponent } from "@/lib/types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PAGES_DIR = path.join(DATA_DIR, "pages");
@@ -93,13 +94,43 @@ export async function getComponent(id: string): Promise<SavedComponent | null> {
 
 export async function saveComponent(component: SavedComponent) {
   const all = await listComponents();
-  const next = [component, ...all.filter((item) => item.id !== component.id)];
+  const withStamp: SavedComponent = {
+    ...component,
+    updatedAt: new Date().toISOString(),
+  };
+  const next = [withStamp, ...all.filter((item) => item.id !== component.id)];
   await fs.writeFile(COMPONENTS_FILE, JSON.stringify(next, null, 2) + "\n", "utf8");
-  return component;
+  return withStamp;
 }
 
 export async function deleteComponent(id: string) {
   const all = await listComponents();
   const next = all.filter((item) => item.id !== id);
   await fs.writeFile(COMPONENTS_FILE, JSON.stringify(next, null, 2) + "\n", "utf8");
+}
+
+/**
+ * Push a saved component master into every page section that references it.
+ * Preserves each instance's id, name, and slotOverrides.
+ */
+export async function syncPagesWithComponent(componentId: string, master: Omit<PageSection, "id">) {
+  const pages = await listPages();
+  let updated = 0;
+  for (const page of pages) {
+    let changed = false;
+    const sections = page.sections.map((section) => {
+      if (section.componentId !== componentId) return section;
+      changed = true;
+      const overrides = collectSlotOverrides(section);
+      const copy = cloneSection({ ...master, id: "tmp" }, { id: section.id, name: section.name });
+      copy.componentId = componentId;
+      copy.slotOverrides = overrides;
+      return applySlotOverrides(copy);
+    });
+    if (changed) {
+      await savePage({ ...page, sections });
+      updated += 1;
+    }
+  }
+  return updated;
 }

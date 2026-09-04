@@ -16,6 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
 import { useNodeCss, usePreviewStateAttr } from "@/components/landing/style-preview";
+import { bindElementToItem } from "@/lib/component-slots";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
 import type { ReactNode } from "react";
@@ -72,7 +73,7 @@ export function LandingElement({
         <Tag
           {...meta}
           className={cn(headingSizes[Tag], alignClass, element.className)}
-          style={{ fontFamily: "var(--lp-font-heading)", ...nodeCss }}
+          style={{ fontFamily: "var(--lp-font-heading)", margin: 0, ...nodeCss }}
         >
           {renderAnimatedText(element, asString(p.text, "Heading"))}
         </Tag>
@@ -83,7 +84,7 @@ export function LandingElement({
         <p
           {...meta}
           className={cn("max-w-2xl text-base leading-7", alignClass, element.className)}
-          style={{ color: "var(--lp-muted-fg)", ...nodeCss }}
+          style={{ color: "var(--lp-muted-fg)", margin: 0, ...nodeCss }}
         >
           {renderAnimatedText(element, asString(p.text, ""))}
         </p>
@@ -285,6 +286,98 @@ export function LandingElement({
           </div>
         </div>
       );
+    case "slot": {
+      const kids = element.children ?? [];
+      return (
+        <div
+          {...meta}
+          className={cn(
+            "relative w-full min-h-[48px]",
+            !kids.length && !renderFrameEmpty && "min-h-[72px]",
+            element.className,
+          )}
+          style={{ display: "block", ...nodeCss }}
+          data-lp-slot={asString(p.name, "Slot")}
+        >
+          <div className="flex w-full flex-col items-stretch gap-3">
+            {kids.map((child) =>
+              renderChild ? (
+                <div key={child.id} className="w-full">
+                  {renderChild(child, element)}
+                </div>
+              ) : (
+                <AnimateHost key={child.id} node={child} className="block w-full">
+                  <LandingElement element={child} interactive={interactive} />
+                </AnimateHost>
+              ),
+            )}
+            {renderFrameEmpty?.(element) ?? null}
+          </div>
+        </div>
+      );
+    }
+    case "list": {
+      const items = Array.isArray(p.items) ? (p.items as Record<string, unknown>[]) : [];
+      const columns = Math.max(1, asNumber(p.columns, 3));
+      const gap = asString(p.gap, "16px");
+      const template = element.children ?? [];
+      return (
+        <div
+          {...meta}
+          className={cn("w-full", element.className)}
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gap,
+            ...nodeCss,
+          }}
+        >
+          {items.map((item, index) => {
+            const bound =
+              template.length > 0
+                ? template.map((child) => bindElementToItem(child, item, index))
+                : null;
+            if (bound) {
+              return (
+                <div key={index} className="min-w-0">
+                  {bound.map((child) =>
+                    renderChild ? (
+                      <div key={child.id} className="w-full">
+                        {renderChild(child, element)}
+                      </div>
+                    ) : (
+                      <AnimateHost key={child.id} node={child} className="block w-full">
+                        <LandingElement element={child} interactive={interactive} />
+                      </AnimateHost>
+                    ),
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div
+                key={index}
+                className="rounded-xl border bg-white p-5 shadow-sm"
+                style={{ borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
+              >
+                <div
+                  className="mb-3 grid size-8 place-items-center rounded-md text-sm font-semibold text-white"
+                  style={{ backgroundColor: "var(--lp-primary)" }}
+                >
+                  {String(item.badge ?? index + 1)}
+                </div>
+                <h3 className="text-base font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
+                  {String(item.title ?? `Item ${index + 1}`)}
+                </h3>
+                <p className="mt-1 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
+                  {String(item.body ?? "")}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
     case "card":
       return (
         <Card

@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
+import { EditorContextMenu } from "@/components/editor/editor-context-menu";
 import { FrameDropZone } from "@/components/editor/frame-drop-zone";
 import { ElementInsertDrop, SectionGapDrop } from "@/components/editor/insert-gaps";
 import { useEditor } from "@/components/editor/editor-context";
@@ -23,7 +24,7 @@ import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
-import { elementsSlot, frameSlotId, slotDefs } from "@/lib/slots";
+import { elementsSlot, frameSlotId, isContainerElement, slotDefs } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
@@ -300,6 +301,7 @@ export function EditorCanvas() {
                     .flatMap((slot) => elementsSlot(section, slot.id).map((element) => element.id));
                   return (
                     <div key={section.id}>
+                    <EditorContextMenu target={{ kind: "section", section }} pageId={page.id}>
                     <Overlay
                       id={section.id}
                       kind="section"
@@ -318,10 +320,14 @@ export function EditorCanvas() {
                           interactive={false}
                           renderElement={(element: PageElement, slotId: string) => {
                             const renderNested = (node: PageElement, nodeSlotId: string): ReactNode => (
+                              <EditorContextMenu
+                                target={{ kind: "element", sectionId: section.id, slotId: nodeSlotId, element: node }}
+                                pageId={page.id}
+                              >
                               <Overlay
                                 id={node.id}
                                 kind="element"
-                                label={node.type}
+                                label={node.textSlot ? `${node.type} · slot` : node.type}
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
                                 data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
                                 onSelect={(event) =>
@@ -333,7 +339,10 @@ export function EditorCanvas() {
                                 onDuplicate={() => duplicateElement(section.id, node.id)}
                                 onRemove={() => removeElement(section.id, node.id)}
                               >
-                                <AnimateHost node={node} className={node.type === "frame" ? "block w-full" : "inline-flex max-w-full"}>
+                                <AnimateHost
+                                  node={node}
+                                  className={isContainerElement(node.type) ? "block w-full" : "inline-flex max-w-full"}
+                                >
                                   <LandingElement
                                     element={node}
                                     interactive={false}
@@ -343,11 +352,19 @@ export function EditorCanvas() {
                                         sectionId={section.id}
                                         parentId={parent.id}
                                         compact={(parent.children ?? []).length > 0}
+                                        label={
+                                          parent.type === "slot"
+                                            ? "Drop into slot"
+                                            : parent.type === "list"
+                                              ? "Drop list template"
+                                              : undefined
+                                        }
                                       />
                                     )}
                                   />
                                 </AnimateHost>
                               </Overlay>
+                              </EditorContextMenu>
                             );
                             return renderNested(element, slotId);
                           }}
@@ -366,6 +383,7 @@ export function EditorCanvas() {
                         />
                       </SortableContext>
                     </Overlay>
+                    </EditorContextMenu>
                     {!isComponent ? <SectionGapDrop index={index + 1} /> : null}
                     </div>
                   );

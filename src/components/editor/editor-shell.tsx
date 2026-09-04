@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Breakpoint } from "@/lib/types";
 
-export function EditorShell() {
+export function EditorShell({ backHref }: { backHref?: string }) {
   const {
     page,
     updatePage,
@@ -40,6 +40,7 @@ export function EditorShell() {
   } = useEditor();
 
   const isComponent = editorMode === "component";
+  const backTo = backHref || "/admin";
 
   useEffect(() => {
     if (selectedElement?.type !== "button") setPreviewState("default");
@@ -48,7 +49,7 @@ export function EditorShell() {
   async function persist() {
     try {
       await save();
-      toast.success(isComponent ? "Component saved" : "Page saved");
+      toast.success(isComponent ? "Component saved — page instances updated" : "Page saved");
     } catch {
       toast.error(isComponent ? "Could not save component" : "Could not save page");
     }
@@ -120,7 +121,7 @@ export function EditorShell() {
     <div className="editor-ui flex h-screen flex-col bg-white text-zinc-900">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2">
         <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600">
-          <Link href="/admin">
+          <Link href={backTo}>
             <ArrowLeft className="size-4" />
           </Link>
         </Button>
