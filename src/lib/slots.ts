@@ -139,6 +139,11 @@ export function isContainerElement(type: string | undefined) {
   return type === "frame" || type === "slot" || type === "list";
 }
 
+/** Built-in catalog sections are fixed components — not user-savable templates. */
+export function isBuiltInSectionType(type: string | undefined) {
+  return Boolean(type && type !== "custom");
+}
+
 export function findElement(
   section: PageSection,
   elementId: string,

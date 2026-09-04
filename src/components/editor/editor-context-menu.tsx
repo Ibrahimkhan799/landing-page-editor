@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useEditor } from "@/components/editor/editor-context";
 import { createBlankBlockSection } from "@/lib/defaults";
-import { findElement, isContainerElement } from "@/lib/slots";
+import { findElement, isBuiltInSectionType, isContainerElement } from "@/lib/slots";
 import type { PageElement, PageSection } from "@/lib/types";
 import { nanoid } from "nanoid";
 
@@ -208,13 +208,18 @@ export function CanvasEditorContextMenu({
         ) : active.kind === "section" ? (
           <>
             <ContextMenuLabel>Section · {active.section.name}</ContextMenuLabel>
-            <ContextMenuItem onSelect={() => void saveSectionAsComponent(active.section)}>
-              Create component
-            </ContextMenuItem>
             {active.section.componentId ? (
               <ContextMenuItem onSelect={() => openComponent(active.section.componentId!)}>
                 Edit component
               </ContextMenuItem>
+            ) : null}
+            {!isBuiltInSectionType(active.section.type) && !active.section.componentId ? (
+              <ContextMenuItem onSelect={() => void saveSectionAsComponent(active.section)}>
+                Save as component
+              </ContextMenuItem>
+            ) : null}
+            {isBuiltInSectionType(active.section.type) && !active.section.componentId ? (
+              <ContextMenuItem disabled>Built-in section</ContextMenuItem>
             ) : null}
             {editorMode === "page" ? (
               <>

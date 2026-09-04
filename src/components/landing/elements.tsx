@@ -45,11 +45,13 @@ export function LandingElement({
   interactive = true,
   renderChild,
   renderFrameEmpty,
+  wrapChildren,
 }: {
   element: PageElement;
   interactive?: boolean;
   renderChild?: (child: PageElement, parent: PageElement) => ReactNode;
   renderFrameEmpty?: (parent: PageElement) => ReactNode;
+  wrapChildren?: (children: ReactNode, parent: PageElement) => ReactNode;
 }) {
   const p = element.props;
   const align = asString(p.align, "left");
@@ -133,10 +135,11 @@ export function LandingElement({
         </a>
       );
     }
-    case "input":
+    case "input": {
+      const label = typeof p.label === "string" ? p.label.trim() : "";
       return (
         <div className="grid w-full max-w-md gap-1">
-          <Label className="text-xs">{asString(p.label, "Label")}</Label>
+          {label ? <Label className="text-xs">{label}</Label> : null}
           <Input
             id={element.htmlId || undefined}
             data-editor-node={element.id}
@@ -152,10 +155,12 @@ export function LandingElement({
           />
         </div>
       );
-    case "textarea":
+    }
+    case "textarea": {
+      const label = typeof p.label === "string" ? p.label.trim() : "";
       return (
         <div className="grid w-full max-w-md gap-1">
-          <Label className="text-xs">{asString(p.label, "Message")}</Label>
+          {label ? <Label className="text-xs">{label}</Label> : null}
           <Textarea
             id={element.htmlId || undefined}
             data-editor-node={element.id}
@@ -170,14 +175,16 @@ export function LandingElement({
           />
         </div>
       );
+    }
     case "select": {
+      const label = typeof p.label === "string" ? p.label.trim() : "";
       const options = asString(p.options, "Option A\nOption B")
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean);
       return (
         <div className="grid w-full max-w-md gap-1">
-          <Label className="text-xs">{asString(p.label, "Select")}</Label>
+          {label ? <Label className="text-xs">{label}</Label> : null}
           <Select disabled={!interactive}>
             <SelectTrigger
               id={element.htmlId || undefined}
@@ -256,7 +263,30 @@ export function LandingElement({
       );
     case "separator":
       return <Separator id={element.htmlId || undefined} data-editor-node={element.id} data-preview-state={previewState} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} style={nodeCss} />;
-    case "frame":
+    case "frame": {
+      const body = (
+        <>
+          {(element.children ?? []).map((child) =>
+            renderChild ? (
+              <div
+                key={child.id}
+                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+              >
+                {renderChild(child, element)}
+              </div>
+            ) : (
+              <AnimateHost
+                key={child.id}
+                node={child}
+                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+              >
+                <LandingElement element={child} interactive={interactive} />
+              </AnimateHost>
+            ),
+          )}
+          {renderFrameEmpty?.(element) ?? null}
+        </>
+      );
       return (
         <div
           {...meta}
@@ -266,28 +296,42 @@ export function LandingElement({
             element.className,
           )}
           style={{
-            display: "block",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: "12px",
             ...nodeCss,
           }}
         >
-          <div className="flex w-full flex-col items-stretch gap-3">
-            {(element.children ?? []).map((child) =>
-              renderChild ? (
-                <div key={child.id} className="w-full">
-                  {renderChild(child, element)}
-                </div>
-              ) : (
-                <AnimateHost key={child.id} node={child} className="block w-full">
-                  <LandingElement element={child} interactive={interactive} />
-                </AnimateHost>
-              ),
-            )}
-            {renderFrameEmpty?.(element) ?? null}
-          </div>
+          {wrapChildren ? wrapChildren(body, element) : body}
         </div>
       );
+    }
     case "slot": {
       const kids = element.children ?? [];
+      const body = (
+        <>
+          {kids.map((child) =>
+            renderChild ? (
+              <div
+                key={child.id}
+                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+              >
+                {renderChild(child, element)}
+              </div>
+            ) : (
+              <AnimateHost
+                key={child.id}
+                node={child}
+                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+              >
+                <LandingElement element={child} interactive={interactive} />
+              </AnimateHost>
+            ),
+          )}
+          {renderFrameEmpty?.(element) ?? null}
+        </>
+      );
       return (
         <div
           {...meta}
@@ -296,23 +340,16 @@ export function LandingElement({
             !kids.length && !renderFrameEmpty && "min-h-[72px]",
             element.className,
           )}
-          style={{ display: "block", ...nodeCss }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: "12px",
+            ...nodeCss,
+          }}
           data-lp-slot={asString(p.name, "Slot")}
         >
-          <div className="flex w-full flex-col items-stretch gap-3">
-            {kids.map((child) =>
-              renderChild ? (
-                <div key={child.id} className="w-full">
-                  {renderChild(child, element)}
-                </div>
-              ) : (
-                <AnimateHost key={child.id} node={child} className="block w-full">
-                  <LandingElement element={child} interactive={interactive} />
-                </AnimateHost>
-              ),
-            )}
-            {renderFrameEmpty?.(element) ?? null}
-          </div>
+          {wrapChildren ? wrapChildren(body, element) : body}
         </div>
       );
     }

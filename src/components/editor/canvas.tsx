@@ -40,21 +40,26 @@ const Overlay = forwardRef<
     onDuplicate?: () => void;
     onRemove?: () => void;
     inactive?: boolean;
+    fillWidth?: boolean;
     data: Record<string, unknown>;
     children: ReactNode;
   }
 >(function Overlay(
-  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, data, children },
+  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, fillWidth, data, children },
   forwardedRef,
 ) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { kind, ...data },
+    animateLayoutChanges: () => false,
+    transition: null,
+    resizeObserverConfig: { disabled: true },
   });
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ top: 0, left: 0, width: 0, height: 0, radius: "0px" });
 
   useEffect(() => {
+    if (isDragging) return;
     const root = boxRef.current;
     if (!root) return;
     const update = () => {
@@ -75,7 +80,7 @@ const Overlay = forwardRef<
     const paint = root.querySelector("[data-editor-node]");
     if (paint) observer.observe(paint);
     return () => observer.disconnect();
-  }, [selected, id]);
+  }, [selected, id, isDragging]);
 
   const chrome = selected || !inactive;
 
@@ -91,8 +96,17 @@ const Overlay = forwardRef<
       data-section-id={typeof data.sectionId === "string" ? data.sectionId : undefined}
       data-slot-id={typeof data.slotId === "string" ? data.slotId : undefined}
       data-element-id={typeof data.elementId === "string" ? data.elementId : undefined}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group/overlay relative overflow-visible", isDragging && "z-30 opacity-40")}
+      style={{
+        // Keep source in place — DragOverlay shows the preview (avoids laggy full-tree transforms)
+        transform: isDragging ? undefined : CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+      }}
+      className={cn(
+        "group/overlay relative overflow-visible",
+        kind === "element" && !fillWidth && "w-max max-w-full",
+        (kind === "section" || fillWidth) && "w-full",
+        isDragging && "z-30 opacity-30",
+      )}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(event);
@@ -328,6 +342,7 @@ export function EditorCanvas() {
                                 kind="element"
                                 label={node.textSlot ? `${node.type} · slot` : node.type}
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
+                                fillWidth={isContainerElement(node.type)}
                                 data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
                                 onSelect={(event) =>
                                   toggleSelectElement(
@@ -340,11 +355,21 @@ export function EditorCanvas() {
                               >
                                 <AnimateHost
                                   node={node}
-                                  className={isContainerElement(node.type) ? "block w-full" : "inline-flex max-w-full"}
+                                  className={
+                                    isContainerElement(node.type) ? "block min-w-0 w-full" : "inline-flex max-w-full"
+                                  }
                                 >
                                   <LandingElement
                                     element={node}
                                     interactive={false}
+                                    wrapChildren={(children, parent) => (
+                                      <SortableContext
+                                        items={(parent.children ?? []).map((child) => child.id)}
+                                        strategy={verticalListSortingStrategy}
+                                      >
+                                        {children}
+                                      </SortableContext>
+                                    )}
                                     renderChild={(child, parent) => renderNested(child, frameSlotId(parent.id))}
                                     renderFrameEmpty={(parent) => (
                                       <FrameDropZone

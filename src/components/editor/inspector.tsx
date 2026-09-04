@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { slotDefs, textSlot } from "@/lib/slots";
+import { isBuiltInSectionType, slotDefs, textSlot } from "@/lib/slots";
 import { cloneSection, createBlankBlockSection } from "@/lib/defaults";
 import { editingBucket, mergeStyles, resolveNodeStyles } from "@/lib/node-styles";
 import type { InteractionState } from "@/lib/types";
@@ -214,7 +214,7 @@ function SectionFields({ slotId }: { slotId: string | null }) {
           <h3 className="text-sm font-semibold">{selectedSection.name}</h3>
         </div>
         <div className="flex">
-          {!isComponentEditor ? (
+          {!isComponentEditor && !isBuiltInSectionType(selectedSection.type) && !selectedSection.componentId ? (
             <Button size="icon" variant="ghost" onClick={saveComponent} title="Save as component">
               <BookmarkPlus className="size-4" />
             </Button>
@@ -543,7 +543,14 @@ function ElementFields() {
         return (
           <TextField
             key={key}
-            label={key}
+            label={
+              key === "label" &&
+              (selectedElement.type === "input" ||
+                selectedElement.type === "textarea" ||
+                selectedElement.type === "select")
+                ? "label (optional)"
+                : key
+            }
             value={value}
             multiline={key === "text" || key === "body" || key === "options"}
             onChange={(next) => updateElementProp(selectedSection.id, selectedElement.id, key, next)}

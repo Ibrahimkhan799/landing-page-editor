@@ -7,24 +7,59 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
-  closestCenter,
+  closestCorners,
   pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { useEditor } from "@/components/editor/editor-context";
-import { elementsSlot, slotDefs } from "@/lib/slots";
-import type { ElementType, SectionType } from "@/lib/types";
+import { elementsSlot, findElement, parseFrameSlotId, slotDefs } from "@/lib/slots";
+import type { ElementType, SavedComponent, SectionType } from "@/lib/types";
+
+type OverlayState = {
+  label: string;
+  width?: number;
+  height?: number;
+};
+
+function dropRank(kind: string | undefined) {
+  switch (kind) {
+    case "element-insert":
+      return 0;
+    case "frame":
+      return 1;
+    case "slot":
+      return 2;
+    case "section-gap":
+      return 3;
+    case "element":
+      return 4;
+    case "section":
+      return 5;
+    default:
+      return 6;
+  }
+}
 
 const collisionDetection: CollisionDetection = (args) => {
-  const nested = pointerWithin(args);
-  if (nested.length) return nested;
-  return closestCenter(args);
+  const pointerHits = pointerWithin(args);
+  if (pointerHits.length) {
+    const ranked = [...pointerHits].sort((a, b) => {
+      const kindOf = (id: UniqueIdentifier) =>
+        args.droppableContainers.find((container) => container.id === id)?.data.current?.kind as
+          | string
+          | undefined;
+      return dropRank(kindOf(a.id)) - dropRank(kindOf(b.id));
+    });
+    return [ranked[0]];
+  }
+  return closestCorners(args);
 };
 
 export function EditorDnd({ children }: { children: ReactNode }) {
@@ -33,43 +68,123 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     addSection,
     addElement,
     insertElementBetweenSections,
+    insertSavedSection,
     moveSection,
     moveElement,
     relocateElement,
   } = useEditor();
-  const [overlay, setOverlay] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<OverlayState | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  function readActiveRect(id: UniqueIdentifier): Pick<OverlayState, "width" | "height"> {
+    if (typeof document === "undefined") return {};
+    const node =
+      (document.querySelector(`[data-editor-overlay][data-element-id="${CSS.escape(String(id))}"]`) as HTMLElement | null) ||
+      (document.querySelector(`[data-editor-overlay][data-section-id="${CSS.escape(String(id))}"]`) as HTMLElement | null) ||
+      (document.querySelector(`[data-editor-node="${CSS.escape(String(id))}"]`) as HTMLElement | null);
+    if (!node) return {};
+    const rect = node.getBoundingClientRect();
+    return {
+      width: Math.min(Math.round(rect.width), 360),
+      height: Math.min(Math.round(rect.height), 120),
+    };
+  }
+
   function onDragStart(event: DragStartEvent) {
-    const data = event.active.data.current;
+    document.documentElement.dataset.dragging = "1";
+    const data = event.active.data.current as
+      | {
+          kind?: string;
+          type?: string;
+          label?: string;
+          component?: SavedComponent;
+        }
+      | undefined;
+    const size = readActiveRect(event.active.id);
+
     if (data?.kind === "library-element") {
-      setOverlay(`Element · ${data.type}`);
+      setOverlay({ label: String(data.type ?? "Element") });
       return;
     }
     if (data?.kind === "library-section") {
-      setOverlay(`Section · ${data.type}`);
+      setOverlay({ label: String(data.type ?? "Section") });
+      return;
+    }
+    if (data?.kind === "library-component") {
+      setOverlay({ label: data.component?.name || data.label || "Component" });
       return;
     }
     if (data?.kind === "section") {
-      setOverlay("Move section");
+      const section = page.sections.find((item) => item.id === event.active.id);
+      setOverlay({ label: section?.name || "Section", ...size });
       return;
     }
     if (data?.kind === "element") {
-      setOverlay("Move element");
+      const section = page.sections.find((item) => item.id === (data as { sectionId?: string }).sectionId);
+      const el = section ? findElement(section, String(event.active.id))?.element : null;
+      const text =
+        (typeof el?.props.text === "string" && el.props.text) ||
+        (typeof el?.props.label === "string" && el.props.label) ||
+        el?.type ||
+        "Element";
+      setOverlay({
+        label: String(text).slice(0, 48),
+        ...size,
+      });
       return;
     }
+    setOverlay({ label: "Item", ...size });
+  }
+
+  function clearDrag() {
+    delete document.documentElement.dataset.dragging;
     setOverlay(null);
   }
 
+  function resolveInsertIndex(
+    overData:
+      | {
+          kind?: string;
+          sectionId?: string;
+          slotId?: string;
+          atIndex?: number;
+          elementId?: string;
+        }
+      | undefined,
+    sectionId: string,
+    slotId: string,
+  ) {
+    if (overData?.kind === "element-insert" && typeof overData.atIndex === "number") {
+      return overData.atIndex;
+    }
+    if (overData?.kind === "element" && overData.elementId) {
+      const section = page.sections.find((item) => item.id === sectionId);
+      if (!section) return undefined;
+      const frameParent = parseFrameSlotId(slotId);
+      const items = frameParent
+        ? findElement(section, frameParent)?.element.children ?? []
+        : elementsSlot(section, slotId);
+      const index = items.findIndex((item) => item.id === overData.elementId);
+      return index >= 0 ? index : undefined;
+    }
+    return undefined;
+  }
+
   function onDragEnd(event: DragEndEvent) {
-    setOverlay(null);
+    clearDrag();
     const { active, over } = event;
     if (!over) return;
     const activeData = active.data.current as
-      | { kind?: string; type?: string; sectionId?: string; slotId?: string }
+      | {
+          kind?: string;
+          type?: string;
+          sectionId?: string;
+          slotId?: string;
+          component?: SavedComponent;
+        }
       | undefined;
     const overData = over.data.current as
       | {
@@ -86,6 +201,13 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       const atIndex = overData?.kind === "section-gap" ? overData.atIndex : undefined;
       addSection(activeData.type as SectionType, atIndex);
       toast.success("Section added");
+      return;
+    }
+
+    if (activeData?.kind === "library-component" && activeData.component) {
+      const atIndex = overData?.kind === "section-gap" ? overData.atIndex : undefined;
+      insertSavedSection(activeData.component, atIndex);
+      toast.success("Component inserted");
       return;
     }
 
@@ -124,6 +246,8 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       let to = page.sections.findIndex((section) => section.id === over.id);
       if (overData?.kind === "section-gap" && typeof overData.atIndex === "number") {
         to = overData.atIndex > from ? overData.atIndex - 1 : overData.atIndex;
+      } else if (overData?.kind === "section" && overData.sectionId) {
+        to = page.sections.findIndex((section) => section.id === overData.sectionId);
       }
       if (from >= 0 && to >= 0 && from !== to) moveSection(from, to);
       return;
@@ -132,15 +256,48 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     if (activeData?.kind === "element" && activeData.sectionId && activeData.slotId) {
       const overSlotId = overData?.slotId;
       const overSectionId = overData?.sectionId;
+
       if (
         overSectionId &&
         overSlotId &&
         (overSectionId !== activeData.sectionId || overSlotId !== activeData.slotId) &&
-        (overData?.kind === "slot" || overData?.kind === "element" || overData?.kind === "frame" || overData?.kind === "element-insert")
+        (overData?.kind === "slot" ||
+          overData?.kind === "element" ||
+          overData?.kind === "frame" ||
+          overData?.kind === "element-insert")
       ) {
-        relocateElement(activeData.sectionId, activeData.slotId, String(active.id), overSectionId, overSlotId);
+        const atIndex = resolveInsertIndex(overData, overSectionId, overSlotId);
+        relocateElement(
+          activeData.sectionId,
+          activeData.slotId,
+          String(active.id),
+          overSectionId,
+          overSlotId,
+          atIndex,
+        );
         return;
       }
+
+      // Reorder inside the same frame
+      if (
+        String(activeData.slotId).startsWith("frame:") &&
+        overSectionId === activeData.sectionId &&
+        overSlotId === activeData.slotId
+      ) {
+        const atIndex = resolveInsertIndex(overData, activeData.sectionId, activeData.slotId);
+        if (typeof atIndex === "number") {
+          relocateElement(
+            activeData.sectionId,
+            activeData.slotId,
+            String(active.id),
+            activeData.sectionId,
+            activeData.slotId,
+            atIndex,
+          );
+        }
+        return;
+      }
+
       const section = page.sections.find((item) => item.id === activeData.sectionId);
       if (!section) return;
       const def = slotDefs(section.type).find((slot) => slot.id === activeData.slotId);
@@ -161,14 +318,24 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
+      autoScroll={{ threshold: { x: 0.12, y: 0.12 }, acceleration: 18, interval: 6 }}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setOverlay(null)}
+      onDragCancel={clearDrag}
     >
       <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
-      <DragOverlay>
+      <DragOverlay dropAnimation={null} style={{ cursor: "grabbing" }}>
         {overlay ? (
-          <div className="rounded-md border bg-white px-3 py-2 text-sm shadow-lg">{overlay}</div>
+          <div
+            className="pointer-events-none overflow-hidden rounded border border-zinc-300 bg-white/95 px-2.5 py-1.5 text-[12px] font-medium text-zinc-800 shadow-sm"
+            style={{
+              width: overlay.width ? Math.max(overlay.width, 72) : undefined,
+              minHeight: overlay.height ? Math.min(overlay.height, 48) : undefined,
+              maxWidth: 360,
+            }}
+          >
+            {overlay.label}
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>
