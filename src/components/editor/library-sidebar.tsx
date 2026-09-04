@@ -189,31 +189,28 @@ function InsertPanel() {
               </Button>
               {components.length === 0 ? (
                 <p className="px-1 text-[11px] text-zinc-400">
-                  Create a blank component, or right-click a section/element and choose Create component.
+                  Create a blank component, or convert any element into a component from the canvas.
                 </p>
               ) : (
                 components.map((component) => (
                   <div
                     key={component.id}
-                    className="flex items-center justify-between gap-1 rounded-md px-2 py-1.5 hover:bg-zinc-100"
+                    className="flex items-center justify-between gap-1 rounded-md px-1 py-0.5 hover:bg-zinc-100"
                   >
-                    <div className="flex min-w-0 items-center gap-2 text-[12px]">
-                      <Puzzle className="size-3.5 text-[#7b61ff]" />
+                    <DraggableItem
+                      id={`lib-component-${component.id}`}
+                      data={{ kind: "library-component", component, label: component.name }}
+                      onClick={() => insertSavedSection(component)}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-[12px]"
+                    >
+                      <Puzzle className="size-3.5 shrink-0 text-[#7b61ff]" />
                       <span className="truncate">{component.name}</span>
-                    </div>
+                    </DraggableItem>
                     <div className="flex shrink-0">
                       <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-[11px]">
                         <Link href={`/admin/component/${component.id}?from=${encodeURIComponent(page.id)}`}>
                           Edit
                         </Link>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-[11px]"
-                        onClick={() => insertSavedSection(component)}
-                      >
-                        Insert
                       </Button>
                       <Button
                         size="icon"

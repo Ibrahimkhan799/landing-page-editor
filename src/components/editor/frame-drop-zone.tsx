@@ -33,11 +33,15 @@ export function FrameDropZone({
         setSelection({ kind: "slot", sectionId, slotId });
       }}
       className={cn(
-        "flex w-full items-center justify-center border border-dashed px-3 text-[11px] transition",
-        compact ? "min-h-8 rounded-md py-1.5" : "min-h-12 rounded-[2px] py-3",
+        "flex items-center justify-center border border-dashed px-3 text-[11px] transition",
+        // When the frame already has children, sit absolutely so flex alignment isn't broken
+        compact
+          ? "absolute inset-x-1 bottom-1 z-[5] min-h-7 rounded-md py-1 opacity-0 hover:opacity-100 focus-visible:opacity-100 group-hover/overlay:opacity-100 [[data-dragging]_&]:opacity-70"
+          : "relative w-full min-h-12 rounded-[2px] py-3",
         isOver || selected
-          ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
+          ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700 opacity-100"
           : "border-zinc-300/80 text-zinc-400 hover:border-[#0d99ff]/70",
+        compact && (isOver || selected) && "opacity-100",
       )}
     >
       {compact ? "Add inside" : label || "Drop elements here"}

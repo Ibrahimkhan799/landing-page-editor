@@ -52,12 +52,21 @@ function SortableLayer({
   icon: typeof Frame;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data,
+    animateLayoutChanges: () => false,
+    transition: null,
+  });
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, paddingLeft: 8 + depth * 12 }}
-      className={cn("flex h-7 items-center gap-0.5 rounded-sm", isDragging && "z-20 opacity-50")}
+      style={{
+        transform: isDragging ? undefined : CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+        paddingLeft: 8 + depth * 12,
+      }}
+      className={cn("flex h-7 items-center gap-0.5 rounded-sm", isDragging && "z-20 opacity-40")}
     >
       <button
         type="button"
