@@ -89,13 +89,24 @@ function stripElement(elements: PageElement[], elementId: string): PageElement[]
     );
 }
 
-function appendChild(elements: PageElement[], parentId: string, child: PageElement): PageElement[] {
+function appendChild(
+  elements: PageElement[],
+  parentId: string,
+  child: PageElement,
+  atIndex?: number,
+): PageElement[] {
   return elements.map((element) => {
     if (element.id === parentId) {
-      return { ...element, children: [...(element.children ?? []), child] };
+      const kids = [...(element.children ?? [])];
+      if (typeof atIndex === "number" && atIndex >= 0 && atIndex <= kids.length) {
+        kids.splice(atIndex, 0, child);
+      } else {
+        kids.push(child);
+      }
+      return { ...element, children: kids };
     }
     if (element.children?.length) {
-      return { ...element, children: appendChild(element.children, parentId, child) };
+      return { ...element, children: appendChild(element.children, parentId, child, atIndex) };
     }
     return element;
   });
@@ -177,6 +188,7 @@ type EditorContextValue = {
     elementId: string,
     toSectionId: string,
     toSlotId: string,
+    atIndex?: number,
   ) => void;
   updateElement: (sectionId: string, elementId: string, patch: Partial<PageElement>) => void;
   updateElementProp: (sectionId: string, elementId: string, key: string, value: unknown) => void;
@@ -557,9 +569,18 @@ export function EditorProvider({
   );
 
   const relocateElement = useCallback(
-    (fromSectionId: string, fromSlotId: string, elementId: string, toSectionId: string, toSlotId: string) => {
+    (
+      fromSectionId: string,
+      fromSlotId: string,
+      elementId: string,
+      toSectionId: string,
+      toSlotId: string,
+      atIndex?: number,
+    ) => {
       mutate((current) => {
         let moving: PageElement | null = null;
+        const sameContainer = fromSectionId === toSectionId && fromSlotId === toSlotId;
+
         const stripped = current.sections.map((section) => {
           if (section.id !== fromSectionId) return section;
           const slots = { ...section.slots };
@@ -599,6 +620,26 @@ export function EditorProvider({
           return { ...section, slots };
         });
         if (!moving) return current;
+
+        // Adjust index when reordering within the same list (account for removal)
+        let insertAt = atIndex;
+        if (sameContainer && typeof atIndex === "number") {
+          const fromList = (() => {
+            const section = current.sections.find((s) => s.id === fromSectionId);
+            if (!section) return [] as PageElement[];
+            const frameParent = parseFrameSlotId(fromSlotId);
+            if (frameParent) {
+              const found = findElement(section, frameParent);
+              return found?.element.children ?? [];
+            }
+            return Array.isArray(section.slots?.[fromSlotId])
+              ? (section.slots[fromSlotId] as PageElement[])
+              : [];
+          })();
+          const fromIndex = fromList.findIndex((el) => el.id === elementId);
+          if (fromIndex >= 0 && atIndex > fromIndex) insertAt = atIndex - 1;
+        }
+
         return {
           ...current,
           sections: stripped.map((section) => {
@@ -607,12 +648,23 @@ export function EditorProvider({
             const slots = { ...section.slots };
             if (toFrame) {
               for (const [key, value] of Object.entries(slots)) {
-                if (Array.isArray(value)) slots[key] = appendChild(value, toFrame, moving as PageElement);
-                else if (value && typeof value === "object" && "id" in value) {
+                if (Array.isArray(value)) {
+                  slots[key] = appendChild(value, toFrame, moving as PageElement, insertAt);
+                } else if (value && typeof value === "object" && "id" in value) {
                   const node = value as PageElement;
-                  if (node.id === toFrame) slots[key] = { ...node, children: [...(node.children ?? []), moving as PageElement] };
-                  else if (node.children?.length) {
-                    slots[key] = { ...node, children: appendChild(node.children, toFrame, moving as PageElement) };
+                  if (node.id === toFrame) {
+                    const kids = [...(node.children ?? [])];
+                    if (typeof insertAt === "number" && insertAt >= 0 && insertAt <= kids.length) {
+                      kids.splice(insertAt, 0, moving as PageElement);
+                    } else {
+                      kids.push(moving as PageElement);
+                    }
+                    slots[key] = { ...node, children: kids };
+                  } else if (node.children?.length) {
+                    slots[key] = {
+                      ...node,
+                      children: appendChild(node.children, toFrame, moving as PageElement, insertAt),
+                    };
                   }
                 }
               }
@@ -622,7 +674,11 @@ export function EditorProvider({
             if (def?.kind === "element") slots[toSlotId] = moving;
             else {
               const list = Array.isArray(slots[toSlotId]) ? [...(slots[toSlotId] as PageElement[])] : [];
-              list.push(moving as PageElement);
+              if (typeof insertAt === "number" && insertAt >= 0 && insertAt <= list.length) {
+                list.splice(insertAt, 0, moving as PageElement);
+              } else {
+                list.push(moving as PageElement);
+              }
               slots[toSlotId] = list;
             }
             return { ...section, slots };

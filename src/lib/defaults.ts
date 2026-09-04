@@ -56,7 +56,9 @@ export function createElement(
     styles:
       type === "heading" || type === "paragraph"
         ? { margin: { top: "0", right: "0", bottom: "0", left: "0" } }
-        : {},
+        : type === "frame"
+          ? { display: "flex", flexDirection: "row", justifyContent: "flex-start", alignItems: "center", gap: "12px" }
+          : {},
     children: type === "frame" || type === "slot" || type === "list" ? [] : undefined,
   };
   if (type === "list") {
@@ -86,12 +88,12 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
     case "button":
       return { label: "Get started", href: "#contact", variant: "primary", size: "md" };
     case "input":
-      return { label: "Email", placeholder: "you@company.com", inputType: "email", required: true };
+      return { label: "", placeholder: "you@company.com", inputType: "email", required: true };
     case "textarea":
-      return { label: "Message", placeholder: "How can we help?", rows: 4 };
+      return { label: "", placeholder: "How can we help?", rows: 4 };
     case "select":
       return {
-        label: "Service",
+        label: "",
         placeholder: "Choose an option",
         options: "Consulting\nDesign\nDevelopment",
       };
