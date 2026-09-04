@@ -430,7 +430,9 @@ export function EditorCanvas() {
                             if (!def || def.kind === "text") return null;
                             const filled =
                               def.kind === "elements" ? elementsSlot(section, slotId).length > 0 : false;
-                            return <EmptySlot sectionId={section.id} slot={def} compact={filled} />;
+                            // Filled slots rely on insert gaps / element drops — no permanent "Add to…" chrome.
+                            if (filled) return null;
+                            return <EmptySlot sectionId={section.id} slot={def} />;
                           }}
                         />
                       </SortableContext>

@@ -24,6 +24,22 @@ export function FrameDropZone({
     data: { kind: "frame", sectionId, slotId, parentId },
   });
 
+  // Filled frames: invisible hit target while dragging — no permanent "Add inside" chrome
+  if (compact) {
+    return (
+      <div
+        ref={setNodeRef}
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 z-[4] rounded-[inherit]",
+          "[[data-dragging]_&]:pointer-events-auto",
+          isOver && "bg-[#0d99ff]/12 shadow-[inset_0_0_0_2px_#0d99ff]",
+          selected && !isOver && "shadow-[inset_0_0_0_1px_rgba(13,153,255,0.35)]",
+        )}
+      />
+    );
+  }
+
   return (
     <button
       ref={setNodeRef}
@@ -33,18 +49,13 @@ export function FrameDropZone({
         setSelection({ kind: "slot", sectionId, slotId });
       }}
       className={cn(
-        "flex items-center justify-center border border-dashed px-3 text-[11px] transition",
-        // When the frame already has children, sit absolutely so flex alignment isn't broken
-        compact
-          ? "absolute inset-x-1 bottom-1 z-[5] min-h-7 rounded-md py-1 opacity-0 hover:opacity-100 focus-visible:opacity-100 group-hover/overlay:opacity-100 [[data-dragging]_&]:opacity-70"
-          : "relative w-full min-h-12 rounded-[2px] py-3",
+        "relative flex w-full min-h-12 items-center justify-center rounded-[2px] border border-dashed px-3 py-3 text-[11px] transition",
         isOver || selected
-          ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700 opacity-100"
+          ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
           : "border-zinc-300/80 text-zinc-400 hover:border-[#0d99ff]/70",
-        compact && (isOver || selected) && "opacity-100",
       )}
     >
-      {compact ? "Add inside" : label || "Drop elements here"}
+      {label || "Drop elements here"}
     </button>
   );
 }

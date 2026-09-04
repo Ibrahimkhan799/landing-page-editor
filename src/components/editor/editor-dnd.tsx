@@ -19,7 +19,14 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { useEditor } from "@/components/editor/editor-context";
-import { elementsSlot, findElement, parseFrameSlotId, slotDefs } from "@/lib/slots";
+import {
+  elementsSlot,
+  findElement,
+  frameSlotId,
+  isContainerElement,
+  parseFrameSlotId,
+  slotDefs,
+} from "@/lib/slots";
 import type { ElementType, SavedComponent, SectionType } from "@/lib/types";
 
 type OverlayState = {
@@ -32,13 +39,14 @@ function dropRank(kind: string | undefined) {
   switch (kind) {
     case "element-insert":
       return 0;
-    case "frame":
-      return 1;
-    case "slot":
-      return 2;
-    case "section-gap":
-      return 3;
     case "element":
+      // Prefer concrete siblings over the parent frame hit-target while reordering.
+      return 1;
+    case "frame":
+      return 2;
+    case "slot":
+      return 3;
+    case "section-gap":
       return 4;
     case "section":
       return 5;
@@ -174,6 +182,9 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     if (overData?.kind === "element" && overData.elementId) {
       const section = page.sections.find((item) => item.id === sectionId);
       if (!section) return undefined;
+      // Dropping onto a container nests inside it — no sibling index.
+      const overEl = findElement(section, overData.elementId)?.element;
+      if (overEl && isContainerElement(overEl.type)) return undefined;
       const frameParent = parseFrameSlotId(slotId);
       const items = frameParent
         ? findElement(section, frameParent)?.element.children ?? []
@@ -182,6 +193,26 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       return index >= 0 ? index : undefined;
     }
     return undefined;
+  }
+
+  /** When the pointer is over a frame/slot/list element, target its interior slot. */
+  function nestSlotIfContainer(
+    sectionId: string | undefined,
+    overData:
+      | {
+          kind?: string;
+          sectionId?: string;
+          slotId?: string;
+          elementId?: string;
+        }
+      | undefined,
+  ): string | undefined {
+    if (!sectionId || !overData?.elementId || overData.kind !== "element") return overData?.slotId;
+    const section = page.sections.find((item) => item.id === sectionId);
+    if (!section) return overData.slotId;
+    const overEl = findElement(section, overData.elementId)?.element;
+    if (overEl && isContainerElement(overEl.type)) return frameSlotId(overEl.id);
+    return overData.slotId;
   }
 
   function onDragEnd(event: DragEndEvent) {
@@ -239,13 +270,34 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         toast.success(`${type} added`);
         return;
       }
-      if (overData?.kind === "element" && overData.slotId && overData.elementId) {
-        const section = page.sections.find((item) => item.id === sectionId);
-        const items = section ? elementsSlot(section, overData.slotId) : [];
-        const index = items.findIndex((item) => item.id === overData.elementId);
-        addElement(sectionId, type, overData.slotId, index >= 0 ? index : undefined);
+      if (overData?.kind === "frame" && overData.slotId) {
+        addElement(sectionId, type, overData.slotId);
         toast.success(`${type} added`);
         return;
+      }
+      if (overData?.kind === "element" && overData.elementId) {
+        const nestedSlot = nestSlotIfContainer(sectionId, overData);
+        if (nestedSlot && nestedSlot !== overData.slotId) {
+          addElement(sectionId, type, nestedSlot);
+          toast.success(`${type} added`);
+          return;
+        }
+        if (overData.slotId) {
+          const section = page.sections.find((item) => item.id === sectionId);
+          const items = section ? elementsSlot(section, overData.slotId) : [];
+          const index = items.findIndex((item) => item.id === overData.elementId);
+          // Frame children use relocate-style index via addElement slot path
+          const frameParent = parseFrameSlotId(overData.slotId);
+          if (frameParent && section) {
+            const kids = findElement(section, frameParent)?.element.children ?? [];
+            const kidIndex = kids.findIndex((item) => item.id === overData.elementId);
+            addElement(sectionId, type, overData.slotId, kidIndex >= 0 ? kidIndex : undefined);
+          } else {
+            addElement(sectionId, type, overData.slotId, index >= 0 ? index : undefined);
+          }
+          toast.success(`${type} added`);
+          return;
+        }
       }
       addElement(sectionId, type, overData?.slotId);
       toast.success(`${type} added`);
@@ -265,8 +317,14 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     }
 
     if (activeData?.kind === "element" && activeData.sectionId && activeData.slotId) {
-      const overSlotId = overData?.slotId;
       const overSectionId = overData?.sectionId;
+      let overSlotId = overData?.slotId;
+
+      // Dropping onto a container element nests into it.
+      if (overData?.kind === "element" && overSectionId && overData.elementId) {
+        const nested = nestSlotIfContainer(overSectionId, overData);
+        if (nested) overSlotId = nested;
+      }
 
       if (
         overSectionId &&
@@ -277,7 +335,10 @@ export function EditorDnd({ children }: { children: ReactNode }) {
           overData?.kind === "frame" ||
           overData?.kind === "element-insert")
       ) {
-        const atIndex = resolveInsertIndex(overData, overSectionId, overSlotId);
+        const atIndex =
+          overSlotId === overData?.slotId
+            ? resolveInsertIndex(overData, overSectionId, overSlotId)
+            : undefined;
         relocateElement(
           activeData.sectionId,
           activeData.slotId,

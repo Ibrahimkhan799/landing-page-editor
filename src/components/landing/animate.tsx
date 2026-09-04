@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, type Transition } from "framer-motion";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useStylePreview } from "@/components/landing/style-preview";
 import {
   ANIMATION_STYLESHEET,
@@ -30,7 +30,6 @@ function splitUnits(text: string, preset: AnimationConfig["preset"]) {
   if (preset === "text-type") {
     return text.split("").map((char) => (char === " " ? "\u00A0" : char));
   }
-  // Keep empty trailing slots out, but preserve intentional spacing via NBSP between units.
   return text.split(/\s+/).filter(Boolean);
 }
 
@@ -66,6 +65,138 @@ export function renderAnimatedText(node: NodeMeta | undefined, text: string) {
   return text;
 }
 
+function LiveTextHost({
+  anim,
+  className,
+  children,
+  nodeId,
+}: {
+  anim: AnimationConfig;
+  className?: string;
+  children: ReactNode;
+  nodeId?: string;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [active, setActive] = useState(anim.trigger === "load");
+
+  useEffect(() => {
+    if (anim.trigger === "load") {
+      setActive(true);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setActive(true);
+          if (anim.trigger === "in-view") observer.disconnect();
+        } else if (anim.trigger === "in-view-replay" || anim.trigger === "loop") {
+          setActive(false);
+        }
+      },
+      { threshold: 0.16 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [anim.trigger]);
+
+  return (
+    <AnimPlaybackContext.Provider value={{ active, playKey: 0 }}>
+      <div
+        ref={ref}
+        className={cn(className)}
+        data-lp-anim={anim.preset}
+        data-lp-trigger={anim.trigger}
+        data-lp-node={nodeId}
+      >
+        {children}
+      </div>
+    </AnimPlaybackContext.Provider>
+  );
+}
+
+function LiveAnimateHost({
+  anim,
+  textMode,
+  className,
+  children,
+  nodeId,
+}: {
+  anim: AnimationConfig;
+  textMode: boolean;
+  className?: string;
+  children: ReactNode;
+  nodeId?: string;
+}) {
+  const variants = motionVariants(anim.preset, anim.distance);
+  const transition: Transition = motionTransition(anim);
+  const perspective =
+    anim.preset === "flip-in" || anim.preset === "text-flip" ? { transformPerspective: 800 } : undefined;
+
+  if (textMode) {
+    return (
+      <LiveTextHost anim={anim} className={className} nodeId={nodeId}>
+        {children}
+      </LiveTextHost>
+    );
+  }
+
+  if (anim.trigger === "load") {
+    return (
+      <motion.div
+        className={cn(className)}
+        data-lp-anim={anim.preset}
+        data-lp-trigger={anim.trigger}
+        data-lp-node={nodeId}
+        variants={variants}
+        initial="hidden"
+        animate="visible"
+        transition={transition}
+        style={perspective}
+      >
+        {children}
+      </motion.div>
+    );
+  }
+
+  if (anim.trigger === "loop") {
+    return (
+      <motion.div
+        className={cn(className)}
+        data-lp-anim={anim.preset}
+        data-lp-trigger={anim.trigger}
+        data-lp-node={nodeId}
+        variants={variants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: false, amount: 0.16 }}
+        transition={{ ...transition, repeat: Infinity, repeatType: "reverse", repeatDelay: 0.35 }}
+        style={perspective}
+      >
+        {children}
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      className={cn(className)}
+      data-lp-anim={anim.preset}
+      data-lp-trigger={anim.trigger}
+      data-lp-node={nodeId}
+      variants={variants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: anim.trigger === "in-view", amount: 0.16 }}
+      transition={transition}
+      style={perspective}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export function AnimateHost({
   node,
   className,
@@ -76,18 +207,23 @@ export function AnimateHost({
   children: ReactNode;
 }) {
   const preview = useStylePreview();
-  const [el, setEl] = useState<HTMLDivElement | null>(null);
-  const [playKey, setPlayKey] = useState(0);
-  const [active, setActive] = useState(true);
   const anim = node?.animation ?? null;
   const textMode = Boolean(anim && isTextAnimation(anim.preset));
+  const [playKey, setPlayKey] = useState(0);
+  const [active, setActive] = useState(true);
 
-  const play = useCallback(() => {
-    if (!anim) return;
-    // Remount + flip active so both host and text units replay from hidden → visible.
-    setActive(false);
-    setPlayKey((value) => value + 1);
-  }, [anim]);
+  // Editor-only Play. Live page uses declarative motion — never remounts via setState.
+  useEffect(() => {
+    if (preview.live || !node?.id || !anim) return;
+    const handler = (event: Event) => {
+      const target = (event as CustomEvent<string>).detail;
+      if (target && target !== node.id) return;
+      setActive(false);
+      setPlayKey((value) => value + 1);
+    };
+    window.addEventListener("lp-play-anim", handler);
+    return () => window.removeEventListener("lp-play-anim", handler);
+  }, [preview.live, node?.id, anim?.preset, anim?.trigger, anim?.duration, anim?.delay]);
 
   useEffect(() => {
     if (playKey === 0) return;
@@ -101,56 +237,30 @@ export function AnimateHost({
     };
   }, [playKey]);
 
-  useEffect(() => {
-    if (!node || !anim || !el) return;
-
-    if (!preview.live) {
-      const handler = (event: Event) => {
-        const target = (event as CustomEvent<string>).detail;
-        if (target && target !== node.id) return;
-        play();
-      };
-      window.addEventListener("lp-play-anim", handler);
-      return () => window.removeEventListener("lp-play-anim", handler);
-    }
-
-    if (anim.trigger === "load") {
-      play();
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          play();
-          if (anim.trigger === "in-view") observer.disconnect();
-        } else if (anim.trigger === "in-view-replay" || anim.trigger === "loop") {
-          setActive(false);
-        }
-      },
-      { threshold: 0.16 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [el, node, anim, preview.live, play]);
-
   if (!node || !anim) return children;
+
+  if (preview.live) {
+    return (
+      <LiveAnimateHost anim={anim} textMode={textMode} className={className} nodeId={node.id}>
+        {children}
+      </LiveAnimateHost>
+    );
+  }
 
   const variants = motionVariants(anim.preset, anim.distance);
   const transition: Transition = motionTransition(anim);
-  const shouldStartHidden = preview.live || playKey > 0;
+  const shouldStartHidden = playKey > 0;
 
   return (
     <AnimPlaybackContext.Provider value={{ active, playKey }}>
       <motion.div
         key={`${node.id}-${playKey}`}
-        ref={setEl}
         className={cn(className)}
         data-lp-anim={anim.preset}
         data-lp-trigger={anim.trigger}
         data-lp-node={node.id}
         variants={textMode ? undefined : variants}
-        initial={textMode ? false : shouldStartHidden ? "hidden" : "visible"}
+        initial={textMode ? false : shouldStartHidden ? "hidden" : false}
         animate={textMode ? undefined : active ? "visible" : "hidden"}
         transition={textMode ? undefined : transition}
         style={

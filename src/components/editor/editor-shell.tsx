@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Monitor, Moon, Smartphone, Sun, Tablet, Save, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { EditorCanvas } from "@/components/editor/canvas";
@@ -69,19 +69,24 @@ export function EditorShell({ backHref }: { backHref?: string }) {
     if (selectedElement?.type !== "button") setPreviewState("default");
   }, [selectedElement, setPreviewState]);
 
-  async function persist() {
+  const persist = useCallback(async () => {
     try {
       await save();
       toast.success(isComponent ? "Component saved — page instances updated" : "Page saved");
     } catch {
       toast.error(isComponent ? "Could not save component" : "Could not save page");
     }
-  }
+  }, [save, isComponent]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return;
       const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void persist();
+        return;
+      }
+      if (isTypingTarget(event.target)) return;
       if (event.key === "Escape") {
         setSelection({ kind: "page" });
         setPreviewState("default");
@@ -138,16 +143,18 @@ export function EditorShell({ backHref }: { backHref?: string }) {
     pasteClipboard,
     selectSlotSiblings,
     isComponent,
+    persist,
   ]);
 
+  // Dark class only on chrome — never wrap the canvas so landing/shadcn stay light.
   return (
-    <div
-      className={cn(
-        "editor-ui flex h-screen flex-col bg-white text-zinc-900",
-        dark && "dark bg-zinc-950 text-zinc-100",
-      )}
-    >
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 px-2 dark:border-zinc-800">
+    <div className="editor-ui flex h-screen flex-col bg-zinc-100 text-zinc-900">
+      <header
+        className={cn(
+          "flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2",
+          dark && "dark border-zinc-800 bg-zinc-950 text-zinc-100",
+        )}
+      >
         <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-zinc-600 dark:text-zinc-300">
           <Link href={backTo}>
             <ArrowLeft className="size-4" />
@@ -222,9 +229,13 @@ export function EditorShell({ backHref }: { backHref?: string }) {
       </header>
       <div className="flex min-h-0 flex-1">
         <EditorDnd>
-          <LibrarySidebar />
+          <div className={cn("contents", dark && "dark")}>
+            <LibrarySidebar />
+          </div>
           <EditorCanvas />
-          <Inspector />
+          <div className={cn("contents", dark && "dark")}>
+            <Inspector />
+          </div>
         </EditorDnd>
       </div>
     </div>
