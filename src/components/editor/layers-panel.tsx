@@ -23,7 +23,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEditor } from "@/components/editor/editor-context";
-import { elementsSlot, elementSlot, frameSlotId, slotDefs } from "@/lib/slots";
+import { elementsSlot, elementSlot, findElement, frameSlotId, slotDefs } from "@/lib/slots";
 import type { PageElement, PageSection } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ function SortableLayer({
   muted,
   icon: Icon,
   onClick,
+  dragDisabled,
 }: {
   id: string;
   data: Record<string, unknown>;
@@ -51,12 +52,14 @@ function SortableLayer({
   muted?: boolean;
   icon: typeof Frame;
   onClick: () => void;
+  dragDisabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data,
     animateLayoutChanges: () => false,
     transition: null,
+    disabled: Boolean(dragDisabled),
   });
   return (
     <div
@@ -68,21 +71,27 @@ function SortableLayer({
       }}
       className={cn("flex h-7 items-center gap-0.5 rounded-sm", isDragging && "z-20 opacity-40")}
     >
-      <button
-        type="button"
-        className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-3" />
-      </button>
+      {!dragDisabled ? (
+        <button
+          type="button"
+          className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing dark:text-zinc-500 dark:hover:text-zinc-200"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3" />
+        </button>
+      ) : (
+        <span className="size-4 shrink-0" />
+      )}
       <button
         type="button"
         onClick={onClick}
         className={cn(
           "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-sm pr-2 text-left text-[12px]",
-          active ? "bg-[#0d99ff]/15 text-zinc-900" : "text-zinc-700 hover:bg-zinc-100",
-          muted && "text-zinc-400",
+          active
+            ? "bg-[#0d99ff]/15 text-zinc-900 dark:text-zinc-50"
+            : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+          muted && "text-zinc-400 dark:text-zinc-500",
         )}
       >
         <Icon className="size-3.5 shrink-0 text-zinc-400" />
@@ -92,7 +101,7 @@ function SortableLayer({
   );
 }
 
-function SlotLayer({
+function SlotDrop({
   sectionId,
   slotId,
   children,
@@ -127,41 +136,64 @@ function LayerTree({
   const Icon = elementIcon(element.type);
   const active = selectedRefs.some((ref) => ref.elementId === element.id);
   const childSlot = frameSlotId(element.id);
+  const kids = element.children ?? [];
+
   return (
     <>
       <SortableLayer
         id={`layer-el-${element.id}`}
         data={{ kind: "layer-element", sectionId, slotId, elementId: element.id }}
         depth={depth}
-        label={element.type}
+        label={element.type === "slot" ? String(element.props.name || "slot") : element.type}
         icon={Icon}
         active={active}
         onClick={() => toggleSelectElement({ sectionId, slotId, elementId: element.id }, false)}
       />
-      {(element.children ?? []).map((child) => (
-        <LayerTree key={child.id} sectionId={sectionId} slotId={childSlot} element={child} depth={depth + 1} />
-      ))}
+      {kids.length > 0 ? (
+        <SortableContext items={kids.map((child) => `layer-el-${child.id}`)} strategy={verticalListSortingStrategy}>
+          {kids.map((child) => (
+            <LayerTree
+              key={child.id}
+              sectionId={sectionId}
+              slotId={childSlot}
+              element={child}
+              depth={depth + 1}
+            />
+          ))}
+        </SortableContext>
+      ) : null}
     </>
   );
 }
 
 function SectionLayers({ section }: { section: PageSection }) {
-  const { selection, setSelection, toggleSelectElement, selectedRefs } = useEditor();
+  const { selection, setSelection, editorMode } = useEditor();
   const [open, setOpen] = useState(true);
   const selected =
     (selection.kind === "section" && selection.sectionId === section.id) ||
     (selection.kind !== "page" &&
       selection.kind !== "elements" &&
-      selection.sectionId === section.id &&
-      selection.kind !== "element");
+      "sectionId" in selection &&
+      selection.sectionId === section.id);
   const defs = slotDefs(section.type);
+  const hideBodyLabel = section.type === "custom" && defs.length === 1 && defs[0]?.id === "body";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `layer-section-${section.id}`,
     data: { kind: "layer-section", sectionId: section.id },
+    animateLayoutChanges: () => false,
+    transition: null,
+    disabled: editorMode === "component",
   });
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn(isDragging && "z-20 opacity-50")}>
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: isDragging ? undefined : CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+      }}
+      className={cn(isDragging && "z-20 opacity-50")}
+    >
       <div className="flex items-center">
         <button
           type="button"
@@ -170,24 +202,28 @@ function SectionLayers({ section }: { section: PageSection }) {
         >
           {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </button>
-        <button
-          type="button"
-          className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-3" />
-        </button>
+        {editorMode === "page" ? (
+          <button
+            type="button"
+            className="grid size-4 shrink-0 cursor-grab place-items-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing dark:hover:text-zinc-200"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3" />
+          </button>
+        ) : (
+          <span className="size-4 shrink-0" />
+        )}
         <button
           type="button"
           onClick={() => setSelection({ kind: "section", sectionId: section.id })}
           className={cn(
             "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-sm px-1 text-left text-[12px]",
             selection.kind === "section" && selection.sectionId === section.id
-              ? "bg-[#0d99ff]/15 text-zinc-900"
+              ? "bg-[#0d99ff]/15 text-zinc-900 dark:text-zinc-50"
               : selected
-                ? "text-zinc-900"
-                : "text-zinc-700 hover:bg-zinc-100",
+                ? "text-zinc-900 dark:text-zinc-100"
+                : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
           )}
         >
           {section.componentId ? (
@@ -202,10 +238,16 @@ function SectionLayers({ section }: { section: PageSection }) {
         ? defs.map((slot) => {
             if (slot.kind === "text") {
               return (
-                <div key={slot.id} className="flex h-7 items-center" style={{ paddingLeft: 32 }}>
+                <button
+                  key={slot.id}
+                  type="button"
+                  className="flex h-7 w-full items-center rounded-sm text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                  style={{ paddingLeft: 32 }}
+                  onClick={() => setSelection({ kind: "slot", sectionId: section.id, slotId: slot.id })}
+                >
                   <Type className="mr-1.5 size-3.5 text-zinc-300" />
-                  <span className="text-[12px] text-zinc-400">{slot.label}</span>
-                </div>
+                  <span className="text-[12px] text-zinc-500 dark:text-zinc-400">{slot.label}</span>
+                </button>
               );
             }
             const items =
@@ -215,25 +257,32 @@ function SectionLayers({ section }: { section: PageSection }) {
                   ? [elementSlot(section, slot.id) as PageElement]
                   : [];
             const sortable = slot.kind === "elements";
+            const showSlotRow = !(hideBodyLabel && slot.id === "body");
             return (
-              <SlotLayer key={slot.id} sectionId={section.id} slotId={slot.id}>
-                <div
-                  className="flex h-7 items-center rounded-sm hover:bg-zinc-50"
-                  style={{ paddingLeft: 32 }}
-                  onClick={() => setSelection({ kind: "slot", sectionId: section.id, slotId: slot.id })}
-                >
-                  <Frame className="mr-1.5 size-3.5 text-zinc-400" />
-                  <span className="text-[12px] text-zinc-700">{slot.label}</span>
-                </div>
+              <SlotDrop key={slot.id} sectionId={section.id} slotId={slot.id}>
+                {showSlotRow ? (
+                  <button
+                    type="button"
+                    className="flex h-7 w-full items-center rounded-sm text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                    style={{ paddingLeft: 32 }}
+                    onClick={() => setSelection({ kind: "slot", sectionId: section.id, slotId: slot.id })}
+                  >
+                    <Frame className="mr-1.5 size-3.5 text-zinc-400" />
+                    <span className="text-[12px] text-zinc-600 dark:text-zinc-400">{slot.label}</span>
+                  </button>
+                ) : null}
                 {sortable ? (
-                  <SortableContext items={items.map((item) => `layer-el-${item.id}`)} strategy={verticalListSortingStrategy}>
+                  <SortableContext
+                    items={items.map((item) => `layer-el-${item.id}`)}
+                    strategy={verticalListSortingStrategy}
+                  >
                     {items.map((element) => (
                       <LayerTree
                         key={element.id}
                         sectionId={section.id}
                         slotId={slot.id}
                         element={element}
-                        depth={3}
+                        depth={showSlotRow ? 3 : 2}
                       />
                     ))}
                   </SortableContext>
@@ -244,11 +293,11 @@ function SectionLayers({ section }: { section: PageSection }) {
                       sectionId={section.id}
                       slotId={slot.id}
                       element={element}
-                      depth={3}
+                      depth={showSlotRow ? 3 : 2}
                     />
                   ))
                 )}
-              </SlotLayer>
+              </SlotDrop>
             );
           })
         : null}
@@ -257,8 +306,8 @@ function SectionLayers({ section }: { section: PageSection }) {
 }
 
 export function LayersPanel() {
-  const { page, setSelection, moveSection, moveElement, relocateElement } = useEditor();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const { page, setSelection, moveSection, moveElement, relocateElement, editorMode } = useEditor();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -284,7 +333,13 @@ export function LayersPanel() {
     if (activeData?.kind === "layer-element" && activeData.sectionId && activeData.slotId && activeData.elementId) {
       if (overData?.kind === "layer-slot" && overData.sectionId && overData.slotId) {
         if (overData.sectionId !== activeData.sectionId || overData.slotId !== activeData.slotId) {
-          relocateElement(activeData.sectionId, activeData.slotId, activeData.elementId, overData.sectionId, overData.slotId);
+          relocateElement(
+            activeData.sectionId,
+            activeData.slotId,
+            activeData.elementId,
+            overData.sectionId,
+            overData.slotId,
+          );
         }
         return;
       }
@@ -292,12 +347,58 @@ export function LayersPanel() {
         overData?.kind === "layer-element" &&
         overData.sectionId &&
         overData.slotId &&
-        (overData.sectionId !== activeData.sectionId || overData.slotId !== activeData.slotId)
+        overData.elementId
       ) {
-        relocateElement(activeData.sectionId, activeData.slotId, activeData.elementId, overData.sectionId, overData.slotId);
-        return;
-      }
-      if (overData?.kind === "layer-element" && overData.slotId === activeData.slotId && overData.sectionId === activeData.sectionId) {
+        const same = overData.sectionId === activeData.sectionId && overData.slotId === activeData.slotId;
+        if (!same) {
+          const section = page.sections.find((item) => item.id === overData.sectionId);
+          let atIndex: number | undefined;
+          if (section) {
+            const frameParent =
+              typeof overData.slotId === "string" && overData.slotId.startsWith("frame:")
+                ? overData.slotId.slice("frame:".length)
+                : null;
+            if (frameParent) {
+              const kids = findElement(section, frameParent)?.element.children ?? [];
+              atIndex = kids.findIndex((el) => el.id === overData.elementId);
+            } else {
+              atIndex = elementsSlot(section, overData.slotId).findIndex((el) => el.id === overData.elementId);
+            }
+            if (atIndex < 0) atIndex = undefined;
+          }
+          relocateElement(
+            activeData.sectionId,
+            activeData.slotId,
+            activeData.elementId,
+            overData.sectionId,
+            overData.slotId,
+            atIndex,
+          );
+          return;
+        }
+
+        // Same container — prefer frame-aware relocate with index, else top-level moveElement
+        if (activeData.slotId.startsWith("frame:") || overData.slotId.startsWith("frame:")) {
+          const section = page.sections.find((item) => item.id === activeData.sectionId);
+          if (!section) return;
+          const frameParent = activeData.slotId.startsWith("frame:")
+            ? activeData.slotId.slice("frame:".length)
+            : null;
+          const kids = frameParent ? findElement(section, frameParent)?.element.children ?? [] : [];
+          const to = kids.findIndex((el) => el.id === overData.elementId);
+          if (to >= 0) {
+            relocateElement(
+              activeData.sectionId,
+              activeData.slotId,
+              activeData.elementId,
+              overData.sectionId,
+              overData.slotId,
+              to,
+            );
+          }
+          return;
+        }
+
         const section = page.sections.find((item) => item.id === activeData.sectionId);
         if (!section) return;
         const items = elementsSlot(section, activeData.slotId);
@@ -312,14 +413,16 @@ export function LayersPanel() {
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <ScrollArea className="h-full">
         <div className="space-y-0.5 p-2">
-          <button
-            type="button"
-            onClick={() => setSelection({ kind: "page" })}
-            className="flex h-7 w-full items-center gap-1.5 rounded-sm px-2 text-left text-[12px] text-zinc-700 hover:bg-zinc-100"
-          >
-            <Frame className="size-3.5 text-zinc-400" />
-            {page.name || "Page"}
-          </button>
+          {editorMode === "page" ? (
+            <button
+              type="button"
+              onClick={() => setSelection({ kind: "page" })}
+              className="flex h-7 w-full items-center gap-1.5 rounded-sm px-2 text-left text-[12px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <Frame className="size-3.5 text-zinc-400" />
+              {page.name || "Page"}
+            </button>
+          ) : null}
           <SortableContext
             items={page.sections.map((section) => `layer-section-${section.id}`)}
             strategy={verticalListSortingStrategy}

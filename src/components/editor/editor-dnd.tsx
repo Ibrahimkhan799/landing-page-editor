@@ -48,18 +48,29 @@ function dropRank(kind: string | undefined) {
 }
 
 const collisionDetection: CollisionDetection = (args) => {
-  const pointerHits = pointerWithin(args);
+  const filtered = {
+    ...args,
+    droppableContainers: args.droppableContainers.filter((container) => container.id !== args.active.id),
+  };
+  const pointerHits = pointerWithin(filtered);
   if (pointerHits.length) {
+    // Prefer the topmost hit among equal ranks (helps upward pointer accuracy)
     const ranked = [...pointerHits].sort((a, b) => {
       const kindOf = (id: UniqueIdentifier) =>
-        args.droppableContainers.find((container) => container.id === id)?.data.current?.kind as
+        filtered.droppableContainers.find((container) => container.id === id)?.data.current?.kind as
           | string
           | undefined;
-      return dropRank(kindOf(a.id)) - dropRank(kindOf(b.id));
+      const rank = dropRank(kindOf(a.id)) - dropRank(kindOf(b.id));
+      if (rank !== 0) return rank;
+      const aTop = filtered.droppableRects.get(a.id)?.top ?? 0;
+      const bTop = filtered.droppableRects.get(b.id)?.top ?? 0;
+      const pointerY = filtered.pointerCoordinates?.y ?? 0;
+      // Prefer the item whose center is closest above/below the pointer
+      return Math.abs(aTop - pointerY) - Math.abs(bTop - pointerY);
     });
     return [ranked[0]];
   }
-  return closestCorners(args);
+  return closestCorners(filtered);
 };
 
 export function EditorDnd({ children }: { children: ReactNode }) {

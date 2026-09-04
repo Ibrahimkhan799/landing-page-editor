@@ -56,6 +56,41 @@ export function migrateSection(section: PageSection): PageSection {
     delete props.ctaHref;
   }
 
+  // Convert legacy comma-separated link/logo text slots into real elements
+  for (const key of ["links", "logos"] as const) {
+    const value = slots[key];
+    if (typeof value === "string") {
+      const parts = value
+        .split(/[,\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      slots[key] = parts.map((label) =>
+        makeElement("button", {
+          label,
+          href: `#${label.toLowerCase().replace(/\s+/g, "-")}`,
+          variant: "ghost",
+          size: "sm",
+        }),
+      );
+    } else if (value === undefined && typeof props[key] === "string") {
+      const parts = String(props[key])
+        .split(/[,\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      slots[key] = parts.map((label) =>
+        makeElement("button", {
+          label,
+          href: `#${label.toLowerCase().replace(/\s+/g, "-")}`,
+          variant: key === "logos" ? "secondary" : "ghost",
+          size: "sm",
+        }),
+      );
+      delete props[key];
+    } else if (!Array.isArray(slots[key]) && slotDefs(section.type).some((d) => d.id === key && d.kind === "elements")) {
+      slots[key] = [];
+    }
+  }
+
   if ((section.type === "hero" || section.type === "hero-split") && !(slots.actions as PageElement[])?.length) {
     const actions: PageElement[] = [];
     if (typeof props.primaryCta === "string") {

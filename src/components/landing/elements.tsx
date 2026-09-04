@@ -59,9 +59,10 @@ export function LandingElement({
     align === "center" ? "text-center mx-auto" : align === "right" ? "text-right ml-auto" : "";
   const nodeCss = useNodeCss(element);
   const previewState = usePreviewStateAttr(element);
+  const paintClass = cn(!interactive && "cursor-default select-none");
   const meta = {
     id: element.htmlId || undefined,
-    className: element.className || undefined,
+    className: cn(element.className, paintClass) || undefined,
     style: nodeCss,
     "data-editor-node": element.id,
     "data-preview-state": previewState,
@@ -74,7 +75,7 @@ export function LandingElement({
       return (
         <Tag
           {...meta}
-          className={cn(headingSizes[Tag], alignClass, element.className)}
+          className={cn(headingSizes[Tag], alignClass, element.className, paintClass)}
           style={{ fontFamily: "var(--lp-font-heading)", margin: 0, ...nodeCss }}
         >
           {renderAnimatedText(element, asString(p.text, "Heading"))}
@@ -85,7 +86,7 @@ export function LandingElement({
       return (
         <p
           {...meta}
-          className={cn("max-w-2xl text-base leading-7", alignClass, element.className)}
+          className={cn("max-w-2xl text-base leading-7", alignClass, element.className, paintClass)}
           style={{ color: "var(--lp-muted-fg)", margin: 0, ...nodeCss }}
         >
           {renderAnimatedText(element, asString(p.text, ""))}
@@ -270,7 +271,14 @@ export function LandingElement({
             renderChild ? (
               <div
                 key={child.id}
-                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+                className={
+                  child.type === "frame" ||
+                  child.type === "slot" ||
+                  child.type === "list" ||
+                  Boolean(child.styles?.width?.endsWith("%"))
+                    ? "w-full min-w-0 shrink-0"
+                    : "w-max max-w-full shrink-0"
+                }
               >
                 {renderChild(child, element)}
               </div>
@@ -315,7 +323,14 @@ export function LandingElement({
             renderChild ? (
               <div
                 key={child.id}
-                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
+                className={
+                  child.type === "frame" ||
+                  child.type === "slot" ||
+                  child.type === "list" ||
+                  Boolean(child.styles?.width?.endsWith("%"))
+                    ? "w-full min-w-0 shrink-0"
+                    : "w-max max-w-full shrink-0"
+                }
               >
                 {renderChild(child, element)}
               </div>
@@ -358,6 +373,80 @@ export function LandingElement({
       const columns = Math.max(1, asNumber(p.columns, 3));
       const gap = asString(p.gap, "16px");
       const template = element.children ?? [];
+      const editing = Boolean(renderChild || renderFrameEmpty || wrapChildren);
+
+      // Editor: edit the real template (so DnD / selection / computed styles work).
+      // Live preview: repeat bound clones for each item.
+      if (editing) {
+        const body = (
+          <>
+            {template.map((child) =>
+              renderChild ? (
+                <div
+                  key={child.id}
+                  className={
+                    child.type === "frame" || child.type === "slot" || child.type === "list"
+                      ? "w-full min-w-0 shrink-0"
+                      : "w-max max-w-full shrink-0"
+                  }
+                >
+                  {renderChild(child, element)}
+                </div>
+              ) : (
+                <AnimateHost key={child.id} node={child} className="w-full min-w-0 shrink-0">
+                  <LandingElement element={child} interactive={interactive} />
+                </AnimateHost>
+              ),
+            )}
+            {renderFrameEmpty?.(element) ?? null}
+          </>
+        );
+        return (
+          <div
+            {...meta}
+            className={cn("relative w-full min-h-[48px]", element.className)}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "stretch",
+              gap: "12px",
+              ...nodeCss,
+            }}
+            data-lp-list=""
+          >
+            <div className="pointer-events-none select-none text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-400">
+              List template · {items.length} item{items.length === 1 ? "" : "s"} · {columns} col
+            </div>
+            <div
+              className="relative rounded-md border border-dashed border-zinc-300/80 p-3"
+              style={{ background: "color-mix(in srgb, var(--lp-muted) 35%, transparent)" }}
+            >
+              {wrapChildren ? wrapChildren(body, element) : body}
+            </div>
+            {items.length > 0 ? (
+              <div
+                className="pointer-events-none grid opacity-50"
+                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap }}
+                aria-hidden
+              >
+                {items.slice(0, Math.min(items.length, columns * 2)).map((item, index) => {
+                  const bound = template.map((child) => bindElementToItem(child, item, index));
+                  return (
+                    <div key={index} className="min-w-0">
+                      {bound.map((child) => (
+                        <AnimateHost key={child.id} node={child} className="block w-full">
+                          <LandingElement element={child} interactive={false} />
+                        </AnimateHost>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+
       return (
         <div
           {...meta}
@@ -377,17 +466,11 @@ export function LandingElement({
             if (bound) {
               return (
                 <div key={index} className="min-w-0">
-                  {bound.map((child) =>
-                    renderChild ? (
-                      <div key={child.id} className="w-full">
-                        {renderChild(child, element)}
-                      </div>
-                    ) : (
-                      <AnimateHost key={child.id} node={child} className="block w-full">
-                        <LandingElement element={child} interactive={interactive} />
-                      </AnimateHost>
-                    ),
-                  )}
+                  {bound.map((child) => (
+                    <AnimateHost key={child.id} node={child} className="block w-full">
+                      <LandingElement element={child} interactive={interactive} />
+                    </AnimateHost>
+                  ))}
                 </div>
               );
             }

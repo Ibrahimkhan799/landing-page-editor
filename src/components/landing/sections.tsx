@@ -128,7 +128,6 @@ export function LandingSection({
 
   switch (section.type) {
     case "navbar": {
-      const links = lines(t("links", str(p.links)));
       const cta = node("cta");
       return (
         <AnimateHost node={section} className="block">
@@ -144,10 +143,11 @@ export function LandingSection({
         >
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6">
             <BrandMark theme={theme} />
-            <nav className="hidden items-center gap-6 text-sm md:flex" style={{ color: "var(--lp-muted-fg)" }}>
-              {links.map((link) => (
-                <span key={link}>{link}</span>
+            <nav className="hidden items-center gap-1 text-sm md:flex" style={{ color: "var(--lp-muted-fg)" }}>
+              {extras("links").map((element) => (
+                <div key={element.id}>{renderEl(element, "links")}</div>
               ))}
+              {empty("links")}
             </nav>
             {cta ? renderEl(cta, "cta") : empty("cta")}
           </div>
@@ -214,10 +214,11 @@ export function LandingSection({
           <p className="mb-6 text-center text-sm font-medium" style={{ color: "var(--lp-muted-fg)" }}>
             {t("headline")}
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-lg font-semibold opacity-70">
-            {lines(t("logos", str(p.logos))).map((logo) => (
-              <span key={logo}>{logo}</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-lg font-semibold opacity-80">
+            {extras("logos").map((element) => (
+              <div key={element.id}>{renderEl(element, "logos")}</div>
             ))}
+            {empty("logos")}
           </div>
           {stack("extra")}
         </SectionShell>
@@ -528,10 +529,11 @@ export function LandingSection({
                 {t("blurb")}
               </p>
             </div>
-            <div className="flex gap-4 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
-              {lines(t("links", str(p.links))).map((link) => (
-                <span key={link}>{link}</span>
+            <div className="flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
+              {extras("links").map((element) => (
+                <div key={element.id}>{renderEl(element, "links")}</div>
               ))}
+              {empty("links")}
             </div>
           </div>
           <p className="mx-auto mt-8 max-w-6xl text-xs" style={{ color: "var(--lp-muted-fg)" }}>
