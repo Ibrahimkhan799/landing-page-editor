@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
 import { LandingElement } from "@/components/landing/elements";
 import { useNodeCss } from "@/components/landing/style-preview";
@@ -83,12 +83,14 @@ export function LandingSection({
   interactive = true,
   renderElement,
   renderEmptySlot,
+  renderInsertGap,
 }: {
   section: PageSection;
   theme: ThemeConfig;
   interactive?: boolean;
   renderElement?: (element: import("@/lib/types").PageElement, slotId: string) => ReactNode;
   renderEmptySlot?: (slotId: string) => ReactNode;
+  renderInsertGap?: (slotId: string, index: number) => ReactNode;
 }) {
   const p = section.props;
   const sectionCss = useNodeCss(section);
@@ -109,8 +111,12 @@ export function LandingSection({
     if (!items.length && !renderEmptySlot) return null;
     return (
       <div className={cn(options?.tight ? "mt-0" : "mt-6", "flex w-full flex-col items-stretch gap-4")}>
-        {items.map((element) => (
-          <div key={element.id}>{renderEl(element, slotId)}</div>
+        {items.length && renderInsertGap ? renderInsertGap(slotId, 0) : null}
+        {items.map((element, index) => (
+          <Fragment key={element.id}>
+            <div>{renderEl(element, slotId)}</div>
+            {renderInsertGap?.(slotId, index + 1)}
+          </Fragment>
         ))}
         {empty(slotId)}
       </div>
@@ -534,14 +540,18 @@ export function LandingSection({
         </footer>
         </AnimateHost>
       );
-    case "custom":
+    case "custom": {
+      const plain = str(p.background, "muted") === "plain";
       return (
-        <SectionShell node={section} muted={str(p.background, "muted") === "muted"}>
-          <div className="space-y-4">
-            {stack("body")}
-          </div>
+        <SectionShell
+          node={section}
+          muted={!plain && str(p.background, "muted") === "muted"}
+          className={plain ? "py-6 md:py-8" : undefined}
+        >
+          <div className="space-y-4">{stack("body")}</div>
         </SectionShell>
       );
+    }
     default:
       return null;
   }

@@ -259,34 +259,29 @@ export function LandingElement({
       return (
         <div
           {...meta}
-          className={cn("min-h-[88px] w-full", element.className)}
+          className={cn(
+            "relative w-full min-h-[48px]",
+            !(element.children ?? []).length && !renderFrameEmpty && "min-h-[72px]",
+            element.className,
+          )}
           style={{
-            borderWidth: "1px",
-            borderStyle: "solid",
-            borderColor: "var(--lp-border)",
-            borderRadius: "var(--lp-radius)",
-            backgroundColor: "var(--lp-card)",
-            padding: 16,
+            display: "block",
             ...nodeCss,
           }}
         >
-          <div className="flex flex-col gap-3">
-            {asString(p.label) ? (
-              <p className="text-[11px] font-medium text-zinc-500">{asString(p.label)}</p>
-            ) : null}
+          <div className="flex w-full flex-col items-stretch gap-3">
             {(element.children ?? []).map((child) =>
               renderChild ? (
-                <div key={child.id}>{renderChild(child, element)}</div>
+                <div key={child.id} className="w-full">
+                  {renderChild(child, element)}
+                </div>
               ) : (
                 <AnimateHost key={child.id} node={child} className="block w-full">
                   <LandingElement element={child} interactive={interactive} />
                 </AnimateHost>
               ),
             )}
-            {renderFrameEmpty?.(element) ??
-              (!(element.children ?? []).length ? (
-                <p className="text-[11px] text-zinc-400">Drop elements into this frame</p>
-              ) : null)}
+            {renderFrameEmpty?.(element) ?? null}
           </div>
         </div>
       );

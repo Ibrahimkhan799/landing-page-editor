@@ -103,7 +103,7 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
         footer: "Learn more",
       };
     case "frame":
-      return { label: "Frame" };
+      return { label: "" };
     default:
       return {};
   }

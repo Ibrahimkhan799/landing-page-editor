@@ -8,9 +8,11 @@ import { cn } from "@/lib/utils";
 export function FrameDropZone({
   sectionId,
   parentId,
+  compact,
 }: {
   sectionId: string;
   parentId: string;
+  compact?: boolean;
 }) {
   const { selection, setSelection } = useEditor();
   const slotId = frameSlotId(parentId);
@@ -29,13 +31,14 @@ export function FrameDropZone({
         setSelection({ kind: "slot", sectionId, slotId });
       }}
       className={cn(
-        "flex min-h-8 w-full items-center justify-center rounded-md border border-dashed px-3 py-1.5 text-[11px] transition",
+        "flex w-full items-center justify-center border border-dashed px-3 text-[11px] transition",
+        compact ? "min-h-8 rounded-md py-1.5" : "min-h-12 rounded-[2px] py-3",
         isOver || selected
           ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
-          : "border-zinc-300 text-zinc-400 hover:border-[#0d99ff]/70",
+          : "border-zinc-300/80 text-zinc-400 hover:border-[#0d99ff]/70",
       )}
     >
-      Add inside frame
+      {compact ? "Add inside" : "Drop elements here"}
     </button>
   );
 }

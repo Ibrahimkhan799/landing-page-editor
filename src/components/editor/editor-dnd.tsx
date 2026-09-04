@@ -28,7 +28,15 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 
 export function EditorDnd({ children }: { children: ReactNode }) {
-  const { page, addSection, addElement, moveSection, moveElement, relocateElement } = useEditor();
+  const {
+    page,
+    addSection,
+    addElement,
+    insertElementBetweenSections,
+    moveSection,
+    moveElement,
+    relocateElement,
+  } = useEditor();
   const [overlay, setOverlay] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -64,20 +72,46 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       | { kind?: string; type?: string; sectionId?: string; slotId?: string }
       | undefined;
     const overData = over.data.current as
-      | { kind?: string; sectionId?: string; slotId?: string }
+      | {
+          kind?: string;
+          sectionId?: string;
+          slotId?: string;
+          atIndex?: number;
+          elementId?: string;
+          type?: string;
+        }
       | undefined;
 
     if (activeData?.kind === "library-section" && activeData.type) {
-      addSection(activeData.type as SectionType);
+      const atIndex = overData?.kind === "section-gap" ? overData.atIndex : undefined;
+      addSection(activeData.type as SectionType, atIndex);
       toast.success("Section added");
       return;
     }
 
     if (activeData?.kind === "library-element" && activeData.type) {
       const type = activeData.type as ElementType;
+      if (overData?.kind === "section-gap" && typeof overData.atIndex === "number") {
+        insertElementBetweenSections(type, overData.atIndex);
+        toast.success(`${type} block added`);
+        return;
+      }
       const sectionId = overData?.sectionId;
       if (!sectionId) {
-        toast.message("Drop this onto a section or slot");
+        toast.message("Drop this onto a section, slot, or between sections");
+        return;
+      }
+      if (overData?.kind === "element-insert" && overData.slotId && typeof overData.atIndex === "number") {
+        addElement(sectionId, type, overData.slotId, overData.atIndex);
+        toast.success(`${type} added`);
+        return;
+      }
+      if (overData?.kind === "element" && overData.slotId && overData.elementId) {
+        const section = page.sections.find((item) => item.id === sectionId);
+        const items = section ? elementsSlot(section, overData.slotId) : [];
+        const index = items.findIndex((item) => item.id === overData.elementId);
+        addElement(sectionId, type, overData.slotId, index >= 0 ? index : undefined);
+        toast.success(`${type} added`);
         return;
       }
       addElement(sectionId, type, overData?.slotId);
@@ -87,7 +121,10 @@ export function EditorDnd({ children }: { children: ReactNode }) {
 
     if (activeData?.kind === "section") {
       const from = page.sections.findIndex((section) => section.id === active.id);
-      const to = page.sections.findIndex((section) => section.id === over.id);
+      let to = page.sections.findIndex((section) => section.id === over.id);
+      if (overData?.kind === "section-gap" && typeof overData.atIndex === "number") {
+        to = overData.atIndex > from ? overData.atIndex - 1 : overData.atIndex;
+      }
       if (from >= 0 && to >= 0 && from !== to) moveSection(from, to);
       return;
     }
@@ -99,7 +136,7 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         overSectionId &&
         overSlotId &&
         (overSectionId !== activeData.sectionId || overSlotId !== activeData.slotId) &&
-        (overData?.kind === "slot" || overData?.kind === "element" || overData?.kind === "frame")
+        (overData?.kind === "slot" || overData?.kind === "element" || overData?.kind === "frame" || overData?.kind === "element-insert")
       ) {
         relocateElement(activeData.sectionId, activeData.slotId, String(active.id), overSectionId, overSlotId);
         return;
@@ -110,7 +147,10 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       if (def?.kind !== "elements") return;
       const items = elementsSlot(section, activeData.slotId);
       const from = items.findIndex((element) => element.id === active.id);
-      const to = items.findIndex((element) => element.id === over.id);
+      let to = items.findIndex((element) => element.id === over.id);
+      if (overData?.kind === "element-insert" && typeof overData.atIndex === "number") {
+        to = overData.atIndex > from ? overData.atIndex - 1 : overData.atIndex;
+      }
       if (from >= 0 && to >= 0 && from !== to) {
         moveElement(section.id, activeData.slotId, from, to);
       }

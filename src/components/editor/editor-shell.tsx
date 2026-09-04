@@ -36,7 +36,10 @@ export function EditorShell() {
     breakpoint,
     setBreakpoint,
     setPreviewState,
+    editorMode,
   } = useEditor();
+
+  const isComponent = editorMode === "component";
 
   useEffect(() => {
     if (selectedElement?.type !== "button") setPreviewState("default");
@@ -45,9 +48,9 @@ export function EditorShell() {
   async function persist() {
     try {
       await save();
-      toast.success("Page saved");
+      toast.success(isComponent ? "Component saved" : "Page saved");
     } catch {
-      toast.error("Could not save page");
+      toast.error(isComponent ? "Could not save component" : "Could not save page");
     }
   }
 
@@ -64,7 +67,7 @@ export function EditorShell() {
         event.preventDefault();
         if (selectedRefs.length) {
           for (const ref of selectedRefs) removeElement(ref.sectionId, ref.elementId);
-        } else {
+        } else if (!isComponent) {
           removeSection(selectedSection.id);
         }
         return;
@@ -72,7 +75,7 @@ export function EditorShell() {
       if (meta && event.key.toLowerCase() === "d" && selectedSection) {
         event.preventDefault();
         if (selectedElement) duplicateElement(selectedSection.id, selectedElement.id);
-        else duplicateSection(selectedSection.id);
+        else if (!isComponent) duplicateSection(selectedSection.id);
         return;
       }
       if (meta && event.key.toLowerCase() === "c") {
@@ -110,6 +113,7 @@ export function EditorShell() {
     copySelection,
     pasteClipboard,
     selectSlotSiblings,
+    isComponent,
   ]);
 
   return (
@@ -126,6 +130,9 @@ export function EditorShell() {
             onChange={(event) => updatePage({ name: event.target.value })}
             className="h-7 max-w-xs border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none focus-visible:border-zinc-200"
           />
+          {isComponent ? (
+            <p className="px-1.5 text-[10px] uppercase tracking-[0.14em] text-zinc-400">Component editor</p>
+          ) : null}
         </div>
         {dirty ? <span className="text-[11px] text-zinc-400">Unsaved</span> : null}
         <div className="flex rounded-md bg-zinc-100 p-0.5">
@@ -150,25 +157,27 @@ export function EditorShell() {
             </button>
           ))}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 text-zinc-500"
-          title="View live"
-          onClick={async () => {
-            if (dirty) {
-              try {
-                await save();
-              } catch {
-                toast.error("Save the page before previewing");
-                return;
+        {!isComponent ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-zinc-500"
+            title="View live"
+            onClick={async () => {
+              if (dirty) {
+                try {
+                  await save();
+                } catch {
+                  toast.error("Save the page before previewing");
+                  return;
+                }
               }
-            }
-            window.open(`/p/${page.slug}`, "_blank", "noopener,noreferrer");
-          }}
-        >
-          <ExternalLink className="size-4" />
-        </Button>
+              window.open(`/p/${page.slug}`, "_blank", "noopener,noreferrer");
+            }}
+          >
+            <ExternalLink className="size-4" />
+          </Button>
+        ) : null}
         <Button size="sm" className="h-8 px-3" onClick={persist} disabled={saving}>
           <Save className="size-3.5" />
           {saving ? "Saving" : "Save"}
