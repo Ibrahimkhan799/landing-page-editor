@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -15,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
-import { EditorContextMenu } from "@/components/editor/editor-context-menu";
+import { CanvasEditorContextMenu } from "@/components/editor/editor-context-menu";
 import { FrameDropZone } from "@/components/editor/frame-drop-zone";
 import { ElementInsertDrop, SectionGapDrop } from "@/components/editor/insert-gaps";
 import { useEditor } from "@/components/editor/editor-context";
@@ -29,29 +29,24 @@ import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
 
-function Overlay({
-  id,
-  kind,
-  selected,
-  label,
-  onSelect,
-  onDuplicate,
-  onRemove,
-  inactive,
-  data,
-  children,
-}: {
-  id: string;
-  kind: "section" | "element";
-  selected: boolean;
-  label: string;
-  onSelect: (event: MouseEvent) => void;
-  onDuplicate?: () => void;
-  onRemove?: () => void;
-  inactive?: boolean;
-  data: Record<string, unknown>;
-  children: ReactNode;
-}) {
+const Overlay = forwardRef<
+  HTMLDivElement,
+  {
+    id: string;
+    kind: "section" | "element";
+    selected: boolean;
+    label: string;
+    onSelect: (event: MouseEvent) => void;
+    onDuplicate?: () => void;
+    onRemove?: () => void;
+    inactive?: boolean;
+    data: Record<string, unknown>;
+    children: ReactNode;
+  }
+>(function Overlay(
+  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, data, children },
+  forwardedRef,
+) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { kind, ...data },
@@ -89,7 +84,13 @@ function Overlay({
       ref={(node) => {
         setNodeRef(node);
         boxRef.current = node;
+        if (typeof forwardedRef === "function") forwardedRef(node);
+        else if (forwardedRef) forwardedRef.current = node;
       }}
+      data-editor-overlay={kind}
+      data-section-id={typeof data.sectionId === "string" ? data.sectionId : undefined}
+      data-slot-id={typeof data.slotId === "string" ? data.slotId : undefined}
+      data-element-id={typeof data.elementId === "string" ? data.elementId : undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn("group/overlay relative overflow-visible", isDragging && "z-30 opacity-40")}
       onClick={(event) => {
@@ -167,7 +168,9 @@ function Overlay({
       {children}
     </div>
   );
-}
+});
+
+Overlay.displayName = "Overlay";
 
 function CanvasSizeBadge() {
   const { selectedElement, selectedSection, selection } = useEditor();
@@ -290,6 +293,7 @@ export function EditorCanvas() {
             className="mx-auto overflow-visible bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_80px_rgba(15,23,42,0.08)]"
             style={{ maxWidth: width }}
           >
+            <CanvasEditorContextMenu pageId={page.id}>
             <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
               <div style={themeStyle(page.theme)}>
               {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
@@ -301,7 +305,6 @@ export function EditorCanvas() {
                     .flatMap((slot) => elementsSlot(section, slot.id).map((element) => element.id));
                   return (
                     <div key={section.id}>
-                    <EditorContextMenu target={{ kind: "section", section }} pageId={page.id}>
                     <Overlay
                       id={section.id}
                       kind="section"
@@ -320,10 +323,6 @@ export function EditorCanvas() {
                           interactive={false}
                           renderElement={(element: PageElement, slotId: string) => {
                             const renderNested = (node: PageElement, nodeSlotId: string): ReactNode => (
-                              <EditorContextMenu
-                                target={{ kind: "element", sectionId: section.id, slotId: nodeSlotId, element: node }}
-                                pageId={page.id}
-                              >
                               <Overlay
                                 id={node.id}
                                 kind="element"
@@ -364,7 +363,6 @@ export function EditorCanvas() {
                                   />
                                 </AnimateHost>
                               </Overlay>
-                              </EditorContextMenu>
                             );
                             return renderNested(element, slotId);
                           }}
@@ -383,13 +381,13 @@ export function EditorCanvas() {
                         />
                       </SortableContext>
                     </Overlay>
-                    </EditorContextMenu>
                     {!isComponent ? <SectionGapDrop index={index + 1} /> : null}
                     </div>
                   );
                 })}
               </div>
             </SortableContext>
+            </CanvasEditorContextMenu>
           </div>
         </div>
       </div>

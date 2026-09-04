@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -13,26 +14,64 @@ import {
 } from "@/components/ui/context-menu";
 import { useEditor } from "@/components/editor/editor-context";
 import { createBlankBlockSection } from "@/lib/defaults";
-import { isContainerElement } from "@/lib/slots";
+import { findElement, isContainerElement } from "@/lib/slots";
 import type { PageElement, PageSection } from "@/lib/types";
 import { nanoid } from "nanoid";
 
-type Target =
+export type ContextTarget =
   | { kind: "section"; section: PageSection }
   | { kind: "element"; sectionId: string; slotId: string; element: PageElement };
 
-export function EditorContextMenu({
-  target,
+function resolveTargetFromEvent(
+  event: ReactMouseEvent | MouseEvent,
+  page: { sections: PageSection[] },
+): ContextTarget | null {
+  const node = event.target as HTMLElement | null;
+  if (!node?.closest) return null;
+
+  const elementOverlay = node.closest('[data-editor-overlay="element"]') as HTMLElement | null;
+  if (elementOverlay) {
+    const sectionId = elementOverlay.dataset.sectionId;
+    const elementId = elementOverlay.dataset.elementId;
+    if (sectionId && elementId) {
+      const section = page.sections.find((s) => s.id === sectionId);
+      if (section) {
+        const found = findElement(section, elementId);
+        if (found) {
+          return {
+            kind: "element",
+            sectionId,
+            slotId: elementOverlay.dataset.slotId || found.slotId,
+            element: found.element,
+          };
+        }
+      }
+    }
+  }
+
+  const sectionOverlay = node.closest('[data-editor-overlay="section"]') as HTMLElement | null;
+  if (sectionOverlay) {
+    const sectionId = sectionOverlay.dataset.sectionId;
+    const section = page.sections.find((s) => s.id === sectionId);
+    if (section) return { kind: "section", section };
+  }
+
+  return null;
+}
+
+export function CanvasEditorContextMenu({
   children,
   pageId,
 }: {
-  target: Target;
   children: ReactNode;
   pageId?: string | null;
 }) {
   const {
     page,
     editorMode,
+    selection,
+    selectedElement,
+    selectedSection,
     duplicateSection,
     removeSection,
     duplicateElement,
@@ -41,6 +80,23 @@ export function EditorContextMenu({
     updateElement,
   } = useEditor();
   const router = useRouter();
+  const [target, setTarget] = useState<ContextTarget | null>(null);
+  const targetRef = useRef<ContextTarget | null>(null);
+
+  function targetFromSelection(): ContextTarget | null {
+    if (selection.kind === "element" && selectedElement && selectedSection) {
+      return {
+        kind: "element",
+        sectionId: selection.sectionId,
+        slotId: selection.slotId,
+        element: selectedElement,
+      };
+    }
+    if (selection.kind === "section" && selectedSection) {
+      return { kind: "section", section: selectedSection };
+    }
+    return null;
+  }
 
   async function saveSectionAsComponent(section: PageSection) {
     const name = window.prompt("Name this component", section.name);
@@ -123,28 +179,50 @@ export function EditorContextMenu({
     router.push(`/admin/component/${componentId}${q}`);
   }
 
+  const active = target ?? targetRef.current;
+
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="editor-ui">
-        {target.kind === "section" ? (
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (!open) {
+          targetRef.current = null;
+          setTarget(null);
+        }
+      }}
+    >
+      <ContextMenuTrigger asChild>
+        <div
+          className="min-h-full"
+          onContextMenu={(event) => {
+            const resolved = resolveTargetFromEvent(event, page) || targetFromSelection();
+            targetRef.current = resolved;
+            setTarget(resolved);
+          }}
+        >
+          {children}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="editor-ui min-w-[12rem]">
+        {!active ? (
+          <ContextMenuItem disabled>Select a layer first</ContextMenuItem>
+        ) : active.kind === "section" ? (
           <>
-            <ContextMenuLabel>Section</ContextMenuLabel>
-            <ContextMenuItem onSelect={() => void saveSectionAsComponent(target.section)}>
+            <ContextMenuLabel>Section · {active.section.name}</ContextMenuLabel>
+            <ContextMenuItem onSelect={() => void saveSectionAsComponent(active.section)}>
               Create component
             </ContextMenuItem>
-            {target.section.componentId ? (
-              <ContextMenuItem onSelect={() => openComponent(target.section.componentId!)}>
+            {active.section.componentId ? (
+              <ContextMenuItem onSelect={() => openComponent(active.section.componentId!)}>
                 Edit component
               </ContextMenuItem>
             ) : null}
             {editorMode === "page" ? (
               <>
-                <ContextMenuItem onSelect={() => duplicateSection(target.section.id)}>Duplicate</ContextMenuItem>
+                <ContextMenuItem onSelect={() => duplicateSection(active.section.id)}>Duplicate</ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   className="text-red-600 focus:text-red-700"
-                  onSelect={() => removeSection(target.section.id)}
+                  onSelect={() => removeSection(active.section.id)}
                 >
                   Delete
                 </ContextMenuItem>
@@ -153,32 +231,32 @@ export function EditorContextMenu({
           </>
         ) : (
           <>
-            <ContextMenuLabel>{target.element.type}</ContextMenuLabel>
-            <ContextMenuItem onSelect={() => void saveElementAsComponent(target.sectionId, target.element)}>
+            <ContextMenuLabel>{active.element.type}</ContextMenuLabel>
+            <ContextMenuItem onSelect={() => void saveElementAsComponent(active.sectionId, active.element)}>
               Create component
             </ContextMenuItem>
-            {(typeof target.element.props.text === "string" ||
-              typeof target.element.props.label === "string" ||
-              typeof target.element.props.title === "string") && (
-              <ContextMenuItem onSelect={() => createTextSlot(target.sectionId, target.element)}>
-                {target.element.textSlot ? "Edit text slot…" : "Create text slot…"}
+            {(typeof active.element.props.text === "string" ||
+              typeof active.element.props.label === "string" ||
+              typeof active.element.props.title === "string") && (
+              <ContextMenuItem onSelect={() => createTextSlot(active.sectionId, active.element)}>
+                {active.element.textSlot ? "Edit text slot…" : "Create text slot…"}
               </ContextMenuItem>
             )}
-            {target.element.textSlot ? (
-              <ContextMenuItem onSelect={() => clearTextSlot(target.sectionId, target.element)}>
+            {active.element.textSlot ? (
+              <ContextMenuItem onSelect={() => clearTextSlot(active.sectionId, active.element)}>
                 Remove text slot
               </ContextMenuItem>
             ) : null}
-            {isContainerElement(target.element.type) ? (
+            {isContainerElement(active.element.type) ? (
               <ContextMenuItem disabled>Container · drop elements inside</ContextMenuItem>
             ) : null}
-            <ContextMenuItem onSelect={() => duplicateElement(target.sectionId, target.element.id)}>
+            <ContextMenuItem onSelect={() => duplicateElement(active.sectionId, active.element.id)}>
               Duplicate
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem
               className="text-red-600 focus:text-red-700"
-              onSelect={() => removeElement(target.sectionId, target.element.id)}
+              onSelect={() => removeElement(active.sectionId, active.element.id)}
             >
               Delete
             </ContextMenuItem>
