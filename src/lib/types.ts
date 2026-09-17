@@ -122,6 +122,22 @@ export type StyleProps = {
   filterBlur?: string;
   backdropBlur?: string;
   cursor?: string;
+  flexWrap?: string;
+  flexGrow?: string;
+  flexShrink?: string;
+  flexBasis?: string;
+  aspectRatio?: string;
+  objectFit?: string;
+  objectPosition?: string;
+  translateX?: string;
+  translateY?: string;
+  backgroundSize?: string;
+  backgroundPosition?: string;
+  backgroundRepeat?: string;
+  gridTemplateColumns?: string;
+  gridTemplateRows?: string;
+  gridColumn?: string;
+  gridRow?: string;
 };
 
 export type StyleOverrides = {

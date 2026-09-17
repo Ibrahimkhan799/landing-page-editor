@@ -78,11 +78,13 @@ export function ShadowPopover({
               None
             </button>
           </div>
-          <div
-            className="grid h-10 place-items-center rounded-sm bg-zinc-100"
-            style={{ boxShadow: serializeShadow(parsed) }}
-          >
-            <div className="size-6 rounded-sm bg-white" />
+          <div className="w-full px-4 py-4 rounded-md border border-zinc-200 bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%,transparent_75%,#f4f4f5_75%),linear-gradient(45deg,#f4f4f5_25%,white_25%,white_75%,#f4f4f5_75%)] bg-[length:10px_10px] bg-[position:0_0,5px_5px] my-3">
+            <div
+              className="grid h-10 place-items-center rounded-sm bg-zinc-100"
+              style={{ boxShadow: serializeShadow(parsed) }}
+            >
+              <div className="size-6 rounded-sm bg-white" />
+            </div>
           </div>
           <SliderRow label="X" value={parsed.x} min={-40} max={40} onChange={(x) => update({ x })} />
           <SliderRow label="Y" value={parsed.y} min={-40} max={40} onChange={(y) => update({ y })} />

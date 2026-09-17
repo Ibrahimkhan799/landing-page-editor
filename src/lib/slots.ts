@@ -158,6 +158,81 @@ export function isInstanceSlotEditable(
   return false;
 }
 
+export function elementContains(element: PageElement, elementId: string): boolean {
+  return element.id === elementId || Boolean(element.children?.some((child) => elementContains(child, elementId)));
+}
+
+export function findElementWithAncestors(
+  section: PageSection,
+  elementId: string,
+): { element: PageElement; ancestors: PageElement[] } | null {
+  function walk(elements: PageElement[], ancestors: PageElement[]): { element: PageElement; ancestors: PageElement[] } | null {
+    for (const element of elements) {
+      if (element.id === elementId) return { element, ancestors };
+      const nested = element.children?.length ? walk(element.children, [...ancestors, element]) : null;
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  for (const def of slotDefs(section.type)) {
+    if (def.kind === "element") {
+      const element = elementSlot(section, def.id);
+      if (element) {
+        const found = walk([element], []);
+        if (found) return found;
+      }
+    }
+    if (def.kind === "elements") {
+      const found = walk(elementsSlot(section, def.id), []);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function isElementEditableInInstance(section: PageSection, elementId: string) {
+  if (!section.componentId) return true;
+  const found = findElementWithAncestors(section, elementId);
+  return Boolean(found && isInstanceSlotEditable(section, found.element, found.ancestors));
+}
+
+export function isSlotEditableInInstance(section: PageSection, slotId: string) {
+  if (!section.componentId) return true;
+  const parentId = parseFrameSlotId(slotId);
+  if (!parentId) return false;
+  const found = findElementWithAncestors(section, parentId);
+  return Boolean(found && isInstanceSlotEditable(section, found.element, found.ancestors));
+}
+
+export type ElementPlacementIssue = "cycle" | "invalid-type" | "locked" | "missing-target" | "occupied";
+
+export function getElementPlacementIssue(
+  section: PageSection,
+  slotId: string,
+  element: PageElement,
+  options?: { allowComponentRoot?: boolean },
+): ElementPlacementIssue | null {
+  if (!options?.allowComponentRoot && !isSlotEditableInInstance(section, slotId)) return "locked";
+
+  const parentId = parseFrameSlotId(slotId);
+  if (parentId) {
+    const parent = findElement(section, parentId)?.element;
+    if (!parent || !isContainerElement(parent.type)) return "missing-target";
+    if (elementContains(element, parentId)) return "cycle";
+    return null;
+  }
+
+  const def = slotDefs(section.type).find((slot) => slot.id === slotId);
+  if (!def || def.kind === "text") return "missing-target";
+  if (def.accept?.length && !def.accept.includes(element.type)) return "invalid-type";
+  if (def.kind === "element") {
+    const existing = elementSlot(section, slotId);
+    if (existing && existing.id !== element.id) return "occupied";
+  }
+  return null;
+}
+
 /** Prefer full-bleed when width is percentage/fill or the node is a container. */
 export function wantsFullWidth(element: PageElement) {
   if (isContainerElement(element.type)) return true;

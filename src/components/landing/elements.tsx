@@ -1,7 +1,13 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,11 +21,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
-import { useNodeCss, usePreviewStateAttr } from "@/components/landing/style-preview";
+import {
+  useNodeCss,
+  usePreviewStateAttr,
+} from "@/components/landing/style-preview";
 import { bindElementToItem } from "@/lib/component-slots";
+import { isContainerElement } from "@/lib/slots";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 const headingSizes = {
   h1: "text-4xl md:text-6xl font-semibold tracking-tight",
@@ -40,6 +50,40 @@ function asBool(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+/**
+ * Extracts the CSS properties that must live on the wrapper div (the direct flex / grid child)
+ * rather than only on the inner element. Without this, `shrink-0` and a fixed `width` on the
+ * wrapper block the parent's flex algorithm and cause overflow in horizontal layouts.
+ */
+function childWrapperStyle(child: PageElement): CSSProperties {
+  const s = child.styles;
+  if (!s) return {};
+  const style: CSSProperties = {};
+  // Sizing — on the wrapper so flex/grid measure the right size
+  if (s.width) style.width = s.width;
+  if (s.minWidth) style.minWidth = s.minWidth;
+  if (s.maxWidth) style.maxWidth = s.maxWidth;
+  if (s.height && s.height !== "auto") style.height = s.height;
+  // Flex item properties — must be on the direct flex child
+  const grow = parseFloat(s.flexGrow ?? "");
+  if (!isNaN(grow)) style.flexGrow = grow;
+  const shrink = parseFloat(s.flexShrink ?? "");
+  if (!isNaN(shrink)) style.flexShrink = shrink;
+  if (s.flexBasis) style.flexBasis = s.flexBasis;
+  if (s.alignSelf && s.alignSelf !== "auto") style.alignSelf = s.alignSelf;
+  // Grid item placement
+  if (s.gridColumn) style.gridColumn = s.gridColumn;
+  if (s.gridRow) style.gridRow = s.gridRow;
+  // Margin needs to be on the wrapper so it participates in the parent's layout
+  if (s.margin) {
+    if (s.margin.top) style.marginTop = s.margin.top;
+    if (s.margin.right) style.marginRight = s.margin.right;
+    if (s.margin.bottom) style.marginBottom = s.margin.bottom;
+    if (s.margin.left) style.marginLeft = s.margin.left;
+  }
+  return style;
+}
+
 export function LandingElement({
   element,
   interactive = true,
@@ -56,7 +100,11 @@ export function LandingElement({
   const p = element.props;
   const align = asString(p.align, "left");
   const alignClass =
-    align === "center" ? "text-center mx-auto" : align === "right" ? "text-right ml-auto" : "";
+    align === "center"
+      ? "text-center mx-auto"
+      : align === "right"
+        ? "text-right ml-auto"
+        : "";
   const nodeCss = useNodeCss(element);
   const previewState = usePreviewStateAttr(element);
   const paintClass = cn(!interactive && "cursor-default select-none");
@@ -71,12 +119,22 @@ export function LandingElement({
   switch (element.type) {
     case "heading": {
       const level = asString(p.level, "h2") as keyof typeof headingSizes;
-      const Tag = (["h1", "h2", "h3", "h4"].includes(level) ? level : "h2") as "h1" | "h2" | "h3" | "h4";
+      const Tag = (["h1", "h2", "h3", "h4"].includes(level) ? level : "h2") as
+        "h1" | "h2" | "h3" | "h4";
       return (
         <Tag
           {...meta}
-          className={cn(headingSizes[Tag], alignClass, element.className, paintClass)}
-          style={{ fontFamily: "var(--lp-font-heading)", margin: 0, ...nodeCss }}
+          className={cn(
+            headingSizes[Tag],
+            alignClass,
+            element.className,
+            paintClass,
+          )}
+          style={{
+            fontFamily: "var(--lp-font-heading)",
+            margin: 0,
+            ...nodeCss,
+          }}
         >
           {renderAnimatedText(element, asString(p.text, "Heading"))}
         </Tag>
@@ -86,7 +144,12 @@ export function LandingElement({
       return (
         <p
           {...meta}
-          className={cn("max-w-2xl text-base leading-7", alignClass, element.className, paintClass)}
+          className={cn(
+            "max-w-2xl text-base leading-7",
+            alignClass,
+            element.className,
+            paintClass,
+          )}
           style={{ color: "var(--lp-muted-fg)", margin: 0, ...nodeCss }}
         >
           {renderAnimatedText(element, asString(p.text, ""))}
@@ -106,9 +169,17 @@ export function LandingElement({
       );
       const style = {
         ...(variant === "primary"
-          ? { backgroundColor: "var(--lp-primary)", color: "var(--lp-primary-fg)", borderRadius: "var(--lp-radius)" }
+          ? {
+              backgroundColor: "var(--lp-primary)",
+              color: "var(--lp-primary-fg)",
+              borderRadius: "var(--lp-radius)",
+            }
           : variant === "secondary"
-            ? { backgroundColor: "var(--lp-secondary)", color: "var(--lp-secondary-fg)", borderRadius: "var(--lp-radius)" }
+            ? {
+                backgroundColor: "var(--lp-secondary)",
+                color: "var(--lp-secondary-fg)",
+                borderRadius: "var(--lp-radius)",
+              }
             : {
                 backgroundColor: "transparent",
                 color: "var(--lp-fg)",
@@ -123,12 +194,19 @@ export function LandingElement({
         id: element.htmlId || undefined,
         "data-editor-node": element.id,
         "data-preview-state": previewState,
-        className: cn(className, "inline-flex items-center justify-center px-4 py-2"),
+        className: cn(
+          className,
+          "inline-flex items-center justify-center px-4 py-2",
+        ),
         style,
         "aria-disabled": disabled || undefined,
       };
       if (!interactive || disabled) {
-        return <span {...shared}>{renderAnimatedText(element, asString(p.label, "Button"))}</span>;
+        return (
+          <span {...shared}>
+            {renderAnimatedText(element, asString(p.label, "Button"))}
+          </span>
+        );
       }
       return (
         <a {...shared} href={href}>
@@ -139,7 +217,7 @@ export function LandingElement({
     case "input": {
       const label = typeof p.label === "string" ? p.label.trim() : "";
       return (
-        <div className="grid w-full max-w-md gap-1">
+        <div className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
           <Input
             id={element.htmlId || undefined}
@@ -160,7 +238,7 @@ export function LandingElement({
     case "textarea": {
       const label = typeof p.label === "string" ? p.label.trim() : "";
       return (
-        <div className="grid w-full max-w-md gap-1">
+        <div className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
           <Textarea
             id={element.htmlId || undefined}
@@ -184,7 +262,7 @@ export function LandingElement({
         .map((line) => line.trim())
         .filter(Boolean);
       return (
-        <div className="grid w-full max-w-md gap-1">
+        <div className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
           <Select disabled={!interactive}>
             <SelectTrigger
@@ -209,8 +287,17 @@ export function LandingElement({
     }
     case "checkbox":
       return (
-        <label className={cn("flex items-center gap-2 text-sm", element.className)} id={element.htmlId || undefined} data-editor-node={element.id} data-preview-state={previewState} style={nodeCss}>
-          <Checkbox disabled={!interactive} defaultChecked={asBool(p.checked)} />
+        <label
+          className={cn("flex items-center gap-2 text-sm", element.className)}
+          id={element.htmlId || undefined}
+          data-editor-node={element.id}
+          data-preview-state={previewState}
+          style={nodeCss}
+        >
+          <Checkbox
+            disabled={!interactive}
+            defaultChecked={asBool(p.checked)}
+          />
           {asString(p.label, "Checkbox")}
         </label>
       );
@@ -224,10 +311,21 @@ export function LandingElement({
           className={element.className}
           style={{
             ...(variant === "primary"
-              ? { backgroundColor: "var(--lp-primary)", color: "var(--lp-primary-fg)", borderColor: "transparent" }
+              ? {
+                  backgroundColor: "var(--lp-primary)",
+                  color: "var(--lp-primary-fg)",
+                  borderColor: "transparent",
+                }
               : variant === "accent"
-                ? { backgroundColor: "var(--lp-accent)", color: "var(--lp-accent-fg)", borderColor: "transparent" }
-                : { backgroundColor: "var(--lp-muted)", color: "var(--lp-fg)" }),
+                ? {
+                    backgroundColor: "var(--lp-accent)",
+                    color: "var(--lp-accent-fg)",
+                    borderColor: "transparent",
+                  }
+                : {
+                    backgroundColor: "var(--lp-muted)",
+                    color: "var(--lp-fg)",
+                  }),
             ...nodeCss,
           }}
         >
@@ -244,7 +342,11 @@ export function LandingElement({
           data-preview-state={previewState}
           src={asString(p.src)}
           alt={asString(p.alt, "")}
-          className={cn("w-full object-cover", asBool(p.rounded, true) && "rounded-[var(--lp-radius)]", element.className)}
+          className={cn(
+            "w-full object-cover",
+            asBool(p.rounded, true) && "rounded-[var(--lp-radius)]",
+            element.className,
+          )}
           style={nodeCss}
         />
       );
@@ -263,35 +365,40 @@ export function LandingElement({
         />
       );
     case "separator":
-      return <Separator id={element.htmlId || undefined} data-editor-node={element.id} data-preview-state={previewState} className={cn(asString(p.spacing) === "lg" ? "my-8" : "my-4", element.className)} style={nodeCss} />;
+      return (
+        <Separator
+          id={element.htmlId || undefined}
+          data-editor-node={element.id}
+          data-preview-state={previewState}
+          className={cn(
+            asString(p.spacing) === "lg" ? "my-8" : "my-4",
+            element.className,
+          )}
+          style={nodeCss}
+        />
+      );
     case "frame": {
       const body = (
         <>
-          {(element.children ?? []).map((child) =>
-            renderChild ? (
+          {(element.children ?? []).map((child) => {
+            const hasW = Boolean(child.styles?.width);
+            const isCont = isContainerElement(child.type);
+            return (
               <div
                 key={child.id}
-                className={
-                  child.type === "frame" ||
-                  child.type === "slot" ||
-                  child.type === "list" ||
-                  Boolean(child.styles?.width?.endsWith("%"))
-                    ? "w-full min-w-0 shrink-0"
-                    : "w-max max-w-full shrink-0"
-                }
+                className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
+                style={childWrapperStyle(child)}
               >
-                {renderChild(child, element)}
+                {renderChild ? (
+                  renderChild(child, element)
+                ) : (
+                  <AnimateHost node={child}>
+                    <LandingElement element={child} interactive={interactive} />
+                  </AnimateHost>
+                )}
               </div>
-            ) : (
-              <AnimateHost
-                key={child.id}
-                node={child}
-                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
-              >
-                <LandingElement element={child} interactive={interactive} />
-              </AnimateHost>
-            ),
-          )}
+            );
+          })}
           {renderFrameEmpty?.(element) ?? null}
         </>
       );
@@ -300,7 +407,9 @@ export function LandingElement({
           {...meta}
           className={cn(
             "relative w-full min-h-[48px]",
-            !(element.children ?? []).length && !renderFrameEmpty && "min-h-[72px]",
+            !(element.children ?? []).length &&
+              !renderFrameEmpty &&
+              "min-h-[72px]",
             element.className,
           )}
           style={{
@@ -319,31 +428,25 @@ export function LandingElement({
       const kids = element.children ?? [];
       const body = (
         <>
-          {kids.map((child) =>
-            renderChild ? (
+          {kids.map((child) => {
+            const hasW = Boolean(child.styles?.width);
+            const isCont = isContainerElement(child.type);
+            return (
               <div
                 key={child.id}
-                className={
-                  child.type === "frame" ||
-                  child.type === "slot" ||
-                  child.type === "list" ||
-                  Boolean(child.styles?.width?.endsWith("%"))
-                    ? "w-full min-w-0 shrink-0"
-                    : "w-max max-w-full shrink-0"
-                }
+                className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
+                style={childWrapperStyle(child)}
               >
-                {renderChild(child, element)}
+                {renderChild ? (
+                  renderChild(child, element)
+                ) : (
+                  <AnimateHost node={child}>
+                    <LandingElement element={child} interactive={interactive} />
+                  </AnimateHost>
+                )}
               </div>
-            ) : (
-              <AnimateHost
-                key={child.id}
-                node={child}
-                className={child.type === "frame" || child.type === "slot" || child.type === "list" ? "w-full min-w-0 shrink-0" : "w-max max-w-full shrink-0"}
-              >
-                <LandingElement element={child} interactive={interactive} />
-              </AnimateHost>
-            ),
-          )}
+            );
+          })}
           {renderFrameEmpty?.(element) ?? null}
         </>
       );
@@ -369,7 +472,9 @@ export function LandingElement({
       );
     }
     case "list": {
-      const items = Array.isArray(p.items) ? (p.items as Record<string, unknown>[]) : [];
+      const items = Array.isArray(p.items)
+        ? (p.items as Record<string, unknown>[])
+        : [];
       const columns = Math.max(1, asNumber(p.columns, 3));
       const gap = asString(p.gap, "16px");
       const template = element.children ?? [];
@@ -380,24 +485,25 @@ export function LandingElement({
       if (editing) {
         const body = (
           <>
-            {template.map((child) =>
-              renderChild ? (
+            {template.map((child) => {
+              const hasW = Boolean(child.styles?.width);
+              const isCont = isContainerElement(child.type);
+              return (
                 <div
                   key={child.id}
-                  className={
-                    child.type === "frame" || child.type === "slot" || child.type === "list"
-                      ? "w-full min-w-0 shrink-0"
-                      : "w-max max-w-full shrink-0"
-                  }
+                  className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
+                  style={childWrapperStyle(child)}
                 >
-                  {renderChild(child, element)}
+                  {renderChild ? (
+                    renderChild(child, element)
+                  ) : (
+                    <AnimateHost node={child}>
+                      <LandingElement element={child} interactive={interactive} />
+                    </AnimateHost>
+                  )}
                 </div>
-              ) : (
-                <AnimateHost key={child.id} node={child} className="w-full min-w-0 shrink-0">
-                  <LandingElement element={child} interactive={interactive} />
-                </AnimateHost>
-              ),
-            )}
+              );
+            })}
             {renderFrameEmpty?.(element) ?? null}
           </>
         );
@@ -415,45 +521,65 @@ export function LandingElement({
             data-lp-list=""
           >
             <div className="pointer-events-none select-none text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-400">
-              List template · {items.length} item{items.length === 1 ? "" : "s"} · {columns} col
+              List template · {items.length} item{items.length === 1 ? "" : "s"}{" "}
+              · {columns} col
             </div>
             <div
               className="relative rounded-md border border-dashed border-zinc-300/80 p-3"
-              style={{ background: "color-mix(in srgb, var(--lp-muted) 35%, transparent)" }}
+              style={{
+                background:
+                  "color-mix(in srgb, var(--lp-muted) 35%, transparent)",
+              }}
             >
               {wrapChildren ? wrapChildren(body, element) : body}
             </div>
             {items.length > 0 ? (
               <div
                 className="pointer-events-none grid opacity-50"
-                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap }}
+                style={{
+                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                  gap,
+                }}
                 aria-hidden
               >
-                {items.slice(0, Math.min(items.length, columns * 2)).map((item, index) => {
-                  const bound = template.map((child) => bindElementToItem(child, item, index));
-                  return (
-                    <div key={index} className="min-w-0">
-                      {bound.map((child) => (
-                        <AnimateHost key={child.id} node={child} className="block w-full">
-                          <LandingElement element={child} interactive={false} />
-                        </AnimateHost>
-                      ))}
-                    </div>
-                  );
-                })}
+                {items
+                  .slice(0, Math.min(items.length, columns * 2))
+                  .map((item, index) => {
+                    const bound = template.map((child) =>
+                      bindElementToItem(child, item, index),
+                    );
+                    return (
+                      <div key={index} className="min-w-0">
+                        {bound.map((child) => (
+                          <div
+                            key={child.id}
+                            className={cn("block min-w-0", !child.styles?.width && "w-full")}
+                            style={childWrapperStyle(child)}
+                          >
+                            <AnimateHost node={child}>
+                              <LandingElement element={child} interactive={false} />
+                            </AnimateHost>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
               </div>
             ) : null}
           </div>
         );
       }
 
+      const liveGridTemplate =
+        element.styles?.gridTemplateColumns ||
+        `repeat(${columns}, minmax(0, 1fr))`;
       return (
         <div
           {...meta}
           className={cn("w-full", element.className)}
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gridTemplateColumns: liveGridTemplate,
             gap,
             ...nodeCss,
           }}
@@ -467,8 +593,15 @@ export function LandingElement({
               return (
                 <div key={index} className="min-w-0">
                   {bound.map((child) => (
-                    <AnimateHost key={child.id} node={child} className="block w-full">
-                      <LandingElement element={child} interactive={interactive} />
+                    <AnimateHost
+                      key={child.id}
+                      node={child}
+                      className="block w-full"
+                    >
+                      <LandingElement
+                        element={child}
+                        interactive={interactive}
+                      />
                     </AnimateHost>
                   ))}
                 </div>
@@ -478,7 +611,10 @@ export function LandingElement({
               <div
                 key={index}
                 className="rounded-xl border bg-white p-5 shadow-sm"
-                style={{ borderColor: "var(--lp-border)", borderRadius: "var(--lp-radius)" }}
+                style={{
+                  borderColor: "var(--lp-border)",
+                  borderRadius: "var(--lp-radius)",
+                }}
               >
                 <div
                   className="mb-3 grid size-8 place-items-center rounded-md text-sm font-semibold text-white"
@@ -486,10 +622,16 @@ export function LandingElement({
                 >
                   {String(item.badge ?? index + 1)}
                 </div>
-                <h3 className="text-base font-semibold" style={{ fontFamily: "var(--lp-font-heading)" }}>
+                <h3
+                  className="text-base font-semibold"
+                  style={{ fontFamily: "var(--lp-font-heading)" }}
+                >
                   {String(item.title ?? `Item ${index + 1}`)}
                 </h3>
-                <p className="mt-1 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
+                <p
+                  className="mt-1 text-sm"
+                  style={{ color: "var(--lp-muted-fg)" }}
+                >
                   {String(item.body ?? "")}
                 </p>
               </div>
@@ -505,17 +647,27 @@ export function LandingElement({
           data-editor-node={element.id}
           data-preview-state={previewState}
           className={cn("max-w-sm", element.className)}
-          style={{ borderRadius: "var(--lp-radius)", backgroundColor: "var(--lp-card)", ...nodeCss }}
+          style={{
+            borderRadius: "var(--lp-radius)",
+            backgroundColor: "var(--lp-card)",
+            ...nodeCss,
+          }}
         >
           <CardHeader>
-            <CardTitle style={{ fontFamily: "var(--lp-font-heading)" }}>{asString(p.title)}</CardTitle>
+            <CardTitle style={{ fontFamily: "var(--lp-font-heading)" }}>
+              {asString(p.title)}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm" style={{ color: "var(--lp-muted-fg)" }}>
               {asString(p.body)}
             </p>
           </CardContent>
-          {asString(p.footer) ? <CardFooter className="text-sm font-medium">{asString(p.footer)}</CardFooter> : null}
+          {asString(p.footer) ? (
+            <CardFooter className="text-sm font-medium">
+              {asString(p.footer)}
+            </CardFooter>
+          ) : null}
         </Card>
       );
     default:
@@ -534,9 +686,15 @@ export function ElementStack({
   return (
     <div className="mt-6 flex flex-col items-start gap-4">
       {elements.map((element) => (
-        <AnimateHost key={element.id} node={element} className="inline-flex max-w-full">
-          <LandingElement element={element} interactive={interactive} />
-        </AnimateHost>
+        <div
+          key={element.id}
+          className={cn("min-w-0", !element.styles?.width && !isContainerElement(element.type) && "w-max max-w-full")}
+          style={childWrapperStyle(element)}
+        >
+          <AnimateHost node={element}>
+            <LandingElement element={element} interactive={interactive} />
+          </AnimateHost>
+        </div>
       ))}
     </div>
   );

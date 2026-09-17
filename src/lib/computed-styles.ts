@@ -143,6 +143,20 @@ export function readComputedStyleProps(el: HTMLElement): StyleProps {
     filterBlur: parseBlur(cs.filter),
     backdropBlur: parseBlur(cs.backdropFilter),
     cursor: cs.cursor !== "auto" ? cs.cursor : "",
+    flexWrap: cs.flexWrap !== "nowrap" ? cs.flexWrap : "",
+    flexGrow: cs.flexGrow !== "0" ? cs.flexGrow : "",
+    flexShrink: cs.flexShrink !== "1" ? cs.flexShrink : "",
+    flexBasis: omitAuto(cs.flexBasis),
+    aspectRatio: cs.aspectRatio !== "auto" ? cs.aspectRatio : "",
+    objectFit: cs.objectFit !== "fill" ? cs.objectFit : "",
+    objectPosition: cs.objectPosition !== "50% 50%" ? cs.objectPosition : "",
+    backgroundSize: omitAuto(cs.backgroundSize),
+    backgroundPosition: cs.backgroundPosition !== "0% 0%" ? cs.backgroundPosition : "",
+    backgroundRepeat: cs.backgroundRepeat !== "repeat" ? cs.backgroundRepeat : "",
+    gridTemplateColumns: cs.gridTemplateColumns !== "none" ? cs.gridTemplateColumns : "",
+    gridTemplateRows: cs.gridTemplateRows !== "none" ? cs.gridTemplateRows : "",
+    gridColumn: cs.gridColumn !== "auto" ? cs.gridColumn : "",
+    gridRow: cs.gridRow !== "auto" ? cs.gridRow : "",
   };
 }
 

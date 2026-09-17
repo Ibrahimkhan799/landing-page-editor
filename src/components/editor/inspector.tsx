@@ -658,6 +658,7 @@ function StyleTab() {
         node={{ ...node, styles: local }}
         computed={live}
         swatches={swatches}
+        elementType={selectedElement?.type ?? (selectedSection && !selectedElement ? "section" : undefined)}
         onChange={(patch) => {
           if (patch.styles) {
             updateSelectedStyles(patch.styles);

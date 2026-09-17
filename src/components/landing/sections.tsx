@@ -104,7 +104,7 @@ export function LandingSection({
     renderElement ? (
       renderElement(element, slotId)
     ) : (
-      <AnimateHost node={element} className="inline-flex max-w-full">
+      <AnimateHost node={element} className="block w-full max-w-full">
         <LandingElement element={element} interactive={interactive} />
       </AnimateHost>
     );

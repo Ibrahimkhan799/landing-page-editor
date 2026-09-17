@@ -14,7 +14,17 @@ import {
 import { cloneElementNode, cloneSection, createBlankBlockSection, createElement, createSection } from "@/lib/defaults";
 import { migratePage } from "@/lib/migrate";
 import { alignStylePatch, applyStyleBucket, cloneStyleProps, editingBucket, mergeStyles } from "@/lib/node-styles";
-import { defaultElementsSlot, findElement, frameSlotId, isContainerElement, parseFrameSlotId, slotDefs } from "@/lib/slots";
+import {
+  defaultElementsSlot,
+  findElement,
+  frameSlotId,
+  getElementPlacementIssue,
+  isContainerElement,
+  isElementEditableInInstance,
+  isSlotEditableInInstance,
+  parseFrameSlotId,
+  slotDefs,
+} from "@/lib/slots";
 import type {
   AlignKind,
   Breakpoint,
@@ -396,15 +406,58 @@ export function EditorProvider({
   const updateSlot = useCallback(
     (sectionId: string, slotId: string, value: SlotValue) => {
       mutate((current) =>
-        mapSection(current, sectionId, (section) => ({ ...section, slots: { ...section.slots, [slotId]: value } })),
+        mapSection(current, sectionId, (section) =>
+          mode !== "component" && !isSlotEditableInInstance(section, slotId)
+            ? section
+            : { ...section, slots: { ...section.slots, [slotId]: value } },
+        ),
       );
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const addElement = useCallback(
     (sectionId: string, type: ElementType, slotId?: string, atIndex?: number) => {
       const element = createElement(type);
+      const requestedSlot = slotId;
+      const sectionSnapshot = page.sections.find((section) => section.id === sectionId);
+      const currentSelection = selectionRef.current;
+      const selectedSlot =
+        currentSelection.kind === "element" && currentSelection.sectionId === sectionId && sectionSnapshot
+          ? isContainerElement(findElement(sectionSnapshot, currentSelection.elementId)?.element.type)
+            ? frameSlotId(currentSelection.elementId)
+            : currentSelection.slotId
+          : currentSelection.kind === "slot" && currentSelection.sectionId === sectionId
+            ? currentSelection.slotId
+            : undefined;
+      const initialTarget = requestedSlot ?? selectedSlot;
+      if (sectionSnapshot && requestedSlot && getElementPlacementIssue(sectionSnapshot, requestedSlot, element, {
+        allowComponentRoot: mode === "component",
+      })) {
+        return;
+      }
+      if (
+        sectionSnapshot?.componentId &&
+        mode !== "component" &&
+        (!initialTarget || !isSlotEditableInInstance(sectionSnapshot, initialTarget))
+      ) {
+        return;
+      }
+      if (sectionSnapshot && !requestedSlot) {
+        const canInsert =
+          (initialTarget &&
+            !getElementPlacementIssue(sectionSnapshot, initialTarget, element, {
+              allowComponentRoot: mode === "component",
+            })) ||
+          slotDefs(sectionSnapshot.type).some(
+            (slot) =>
+              (slot.kind === "element" || slot.kind === "elements") &&
+              !getElementPlacementIssue(sectionSnapshot, slot.id, element, {
+                allowComponentRoot: mode === "component",
+              }),
+          );
+        if (!canInsert) return;
+      }
       let targetSlot = slotId;
       mutate((current) =>
         mapSection(current, sectionId, (section) => {
@@ -423,10 +476,13 @@ export function EditorProvider({
 
           if (frameParent) {
             targetSlot = frameSlotId(frameParent);
+            if (getElementPlacementIssue(section, targetSlot, element, { allowComponentRoot: mode === "component" })) {
+              return section;
+            }
             const slots = { ...section.slots };
             for (const [key, value] of Object.entries(slots)) {
               if (key.startsWith("frame:")) continue;
-              if (Array.isArray(value)) slots[key] = appendChild(value, frameParent, element);
+              if (Array.isArray(value)) slots[key] = appendChild(value, frameParent, element, atIndex);
               else if (value && typeof value === "object" && "id" in value) {
                 const node = value as PageElement;
                 if (node.id === frameParent) {
@@ -435,7 +491,7 @@ export function EditorProvider({
                   kids.splice(insertAt, 0, element);
                   slots[key] = { ...node, children: kids };
                 } else if (node.children?.length) {
-                  slots[key] = { ...node, children: appendChild(node.children, frameParent, element) };
+                  slots[key] = { ...node, children: appendChild(node.children, frameParent, element, atIndex) };
                 }
               }
             }
@@ -455,7 +511,7 @@ export function EditorProvider({
             defaultElementsSlot(section);
           targetSlot = preferred;
           const def = defs.find((slot) => slot.id === preferred);
-          const accepted =
+          let accepted =
             !def?.accept?.length || def.accept.includes(type)
               ? preferred
               : defs.find(
@@ -463,17 +519,33 @@ export function EditorProvider({
                     (slot.kind === "element" || slot.kind === "elements") &&
                     (!slot.accept?.length || slot.accept.includes(type)),
                 )?.id ?? preferred;
+          if (getElementPlacementIssue(section, accepted, element, { allowComponentRoot: mode === "component" })) {
+            if (requestedSlot) return section;
+            const fallback = defs.find(
+              (slot) =>
+                (slot.kind === "element" || slot.kind === "elements") &&
+                !getElementPlacementIssue(section, slot.id, element, { allowComponentRoot: mode === "component" }),
+            );
+            if (!fallback) return section;
+            accepted = fallback.id;
+          }
           targetSlot = accepted;
           if (parseFrameSlotId(accepted)) {
             const parent = parseFrameSlotId(accepted)!;
             targetSlot = frameSlotId(parent);
             const slots = { ...section.slots };
             for (const [key, value] of Object.entries(slots)) {
-              if (Array.isArray(value)) slots[key] = appendChild(value, parent, element);
+              if (Array.isArray(value)) slots[key] = appendChild(value, parent, element, atIndex);
               else if (value && typeof value === "object" && "id" in value) {
                 const node = value as PageElement;
-                if (node.id === parent) slots[key] = { ...node, children: [...(node.children ?? []), element] };
-                else if (node.children?.length) slots[key] = { ...node, children: appendChild(node.children, parent, element) };
+                if (node.id === parent) {
+                  const kids = [...(node.children ?? [])];
+                  const at = atIndex === undefined ? kids.length : Math.max(0, Math.min(atIndex, kids.length));
+                  kids.splice(at, 0, element);
+                  slots[key] = { ...node, children: kids };
+                } else if (node.children?.length) {
+                  slots[key] = { ...node, children: appendChild(node.children, parent, element, atIndex) };
+                }
               }
             }
             return { ...section, slots };
@@ -498,13 +570,14 @@ export function EditorProvider({
       );
       setSelection({ kind: "element", sectionId, slotId: targetSlot ?? "extra", elementId: element.id });
     },
-    [mutate],
+    [mode, mutate, page.sections],
   );
 
   const removeElement = useCallback(
     (sectionId: string, elementId: string) => {
       mutate((current) =>
         mapSection(current, sectionId, (section) => {
+          if (mode !== "component" && !isElementEditableInInstance(section, elementId)) return section;
           const slots = { ...section.slots };
           for (const [key, value] of Object.entries(slots)) {
             if (Array.isArray(value)) slots[key] = stripElement(value, elementId);
@@ -519,7 +592,7 @@ export function EditorProvider({
       );
       setSelection({ kind: "section", sectionId });
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const duplicateElement = useCallback(
@@ -529,11 +602,13 @@ export function EditorProvider({
       mutate((current) =>
         mapSection(current, sectionId, (section) => {
           const found = findElement(section, elementId);
-          if (!found) return section;
+          if (!found || (mode !== "component" && !isElementEditableInInstance(section, elementId))) return section;
+          const frameParent = parseFrameSlotId(found.slotId) ?? found.parentId;
+          const def = slotDefs(section.type).find((slot) => slot.id === found.slotId);
+          if (!frameParent && def?.kind === "element") return section;
           const copy = cloneElementNode(found.element);
           copyId = copy.id;
           slotId = found.slotId;
-          const frameParent = parseFrameSlotId(found.slotId) ?? found.parentId;
           const slots = { ...section.slots };
           if (frameParent) {
             const insertAfter = (elements: PageElement[]): PageElement[] =>
@@ -551,21 +626,16 @@ export function EditorProvider({
             }
             return { ...section, slots };
           }
-          const def = slotDefs(section.type).find((slot) => slot.id === found.slotId);
-          if (def?.kind === "element") {
-            slots[found.slotId] = copy;
-          } else {
-            const list = Array.isArray(slots[found.slotId]) ? [...(slots[found.slotId] as PageElement[])] : [];
-            const index = list.findIndex((element) => element.id === elementId);
-            list.splice(index + 1, 0, copy);
-            slots[found.slotId] = list;
-          }
+          const list = Array.isArray(slots[found.slotId]) ? [...(slots[found.slotId] as PageElement[])] : [];
+          const index = list.findIndex((element) => element.id === elementId);
+          list.splice(index + 1, 0, copy);
+          slots[found.slotId] = list;
           return { ...section, slots };
         }),
       );
       if (copyId) setSelection({ kind: "element", sectionId, slotId, elementId: copyId });
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const relocateElement = useCallback(
@@ -578,6 +648,19 @@ export function EditorProvider({
       atIndex?: number,
     ) => {
       mutate((current) => {
+        const sourceSection = current.sections.find((section) => section.id === fromSectionId);
+        const destinationSection = current.sections.find((section) => section.id === toSectionId);
+        const movingElement = sourceSection ? findElement(sourceSection, elementId)?.element : null;
+        if (!sourceSection || !destinationSection || !movingElement) return current;
+        if (mode !== "component" && !isElementEditableInInstance(sourceSection, elementId)) return current;
+        if (
+          getElementPlacementIssue(destinationSection, toSlotId, movingElement, {
+            allowComponentRoot: mode === "component",
+          })
+        ) {
+          return current;
+        }
+
         const sameContainer = fromSectionId === toSectionId && fromSlotId === toSlotId;
 
         // Same-container reorder: use arrayMove so up/down land on the same index math
@@ -701,7 +784,7 @@ export function EditorProvider({
       });
       setSelection({ kind: "element", sectionId: toSectionId, slotId: toSlotId, elementId });
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const moveElement = useCallback(
@@ -710,28 +793,33 @@ export function EditorProvider({
         mapSection(current, sectionId, (section) => {
           const value = section.slots?.[slotId];
           if (!Array.isArray(value)) return section;
+          const moving = value[from];
+          if (!moving || (mode !== "component" && !isElementEditableInInstance(section, moving.id))) return section;
           return { ...section, slots: { ...section.slots, [slotId]: arrayMove(value, from, to) } };
         }),
       );
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const updateElement = useCallback(
     (sectionId: string, elementId: string, patch: Partial<PageElement>) => {
       mutate((current) =>
         mapSection(current, sectionId, (section) =>
-          mapElement(section, elementId, (element) => ({ ...element, ...patch })),
+          mode !== "component" && !isElementEditableInInstance(section, elementId)
+            ? section
+            : mapElement(section, elementId, (element) => ({ ...element, ...patch })),
         ),
       );
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const updateElementProp = useCallback(
     (sectionId: string, elementId: string, key: string, value: unknown) => {
       mutate((current) =>
         mapSection(current, sectionId, (section) => {
+          if (mode !== "component" && !isElementEditableInInstance(section, elementId)) return section;
           const mapped = mapElement(section, elementId, (element) => {
             const next = { ...element, props: { ...element.props, [key]: value } };
             return next;
@@ -747,25 +835,27 @@ export function EditorProvider({
         }),
       );
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const updateElementMeta = useCallback(
     (sectionId: string, elementId: string, patch: NodeMeta) => {
       mutate((current) =>
         mapSection(current, sectionId, (section) =>
-          mapElement(section, elementId, (element) => ({
-            ...element,
-            ...patch,
-            styles: patch.styles ?? element.styles,
-            responsive: patch.responsive ?? element.responsive,
-            states: patch.states ?? element.states,
-            animation: patch.animation !== undefined ? patch.animation : element.animation,
-          })),
+          mode !== "component" && !isElementEditableInInstance(section, elementId)
+            ? section
+            : mapElement(section, elementId, (element) => ({
+                ...element,
+                ...patch,
+                styles: patch.styles ?? element.styles,
+                responsive: patch.responsive ?? element.responsive,
+                states: patch.states ?? element.states,
+                animation: patch.animation !== undefined ? patch.animation : element.animation,
+              })),
         ),
       );
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const updateSelectedStyles = useCallback(
@@ -789,13 +879,19 @@ export function EditorProvider({
         let next = current;
         for (const ref of refs) {
           next = mapSection(next, ref.sectionId, (section) =>
-            mapElement(section, ref.elementId, (element) => applyStyleBucket(element, styles, bp, state) as PageElement),
+            mode !== "component" && !isElementEditableInInstance(section, ref.elementId)
+              ? section
+              : mapElement(
+                  section,
+                  ref.elementId,
+                  (element) => applyStyleBucket(element, styles, bp, state) as PageElement,
+                ),
           );
         }
         return next;
       });
     },
-    [mutate],
+    [mode, mutate],
   );
 
   const toggleSelectElement = useCallback((ref: ElementRef, additive = false) => {

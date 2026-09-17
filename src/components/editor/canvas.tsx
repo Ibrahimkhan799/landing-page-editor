@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent, ReactNode } from "react";
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -24,7 +24,15 @@ import { LandingElement } from "@/components/landing/elements";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
-import { elementsSlot, frameSlotId, isContainerElement, isInstanceSlotEditable, slotDefs, wantsFullWidth } from "@/lib/slots";
+import {
+  elementsSlot,
+  elementSlot,
+  frameSlotId,
+  isContainerElement,
+  isInstanceSlotEditable,
+  slotDefs,
+  wantsFullWidth,
+} from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
@@ -52,13 +60,19 @@ const Overlay = forwardRef<
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { kind, ...data },
-    animateLayoutChanges: () => false,
-    transition: null,
-    resizeObserverConfig: { disabled: true },
     disabled: Boolean(locked),
   });
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ top: 0, left: 0, width: 0, height: 0, radius: "0px" });
+  const [directHover, setDirectHover] = useState(false);
+  const handleMouseOver = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDirectHover(true);
+  }, []);
+  const handleMouseOut = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDirectHover(false);
+  }, []);
 
   useEffect(() => {
     if (isDragging) return;
@@ -109,6 +123,8 @@ const Overlay = forwardRef<
         (kind === "section" || fillWidth) && "w-full",
         isDragging && "z-30 opacity-30",
       )}
+      onMouseOver={handleMouseOver}
+      onMouseOut={handleMouseOut}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(event);
@@ -122,7 +138,9 @@ const Overlay = forwardRef<
             ? "shadow-[0_0_0_1px_#0d99ff]"
             : inactive
               ? "shadow-none"
-              : "shadow-none group-hover/overlay:shadow-[0_0_0_1px_rgba(13,153,255,0.55)]",
+              : directHover
+                ? "shadow-[0_0_0_1px_rgba(13,153,255,0.55)]"
+                : "shadow-none",
         )}
         style={{
           top: box.top,
@@ -136,7 +154,13 @@ const Overlay = forwardRef<
         data-editor-chrome
         className={cn(
           "absolute z-20 flex h-4 items-center gap-0.5",
-          selected ? "opacity-100" : chrome ? "opacity-0 group-hover/overlay:opacity-100" : "opacity-0",
+          selected
+            ? "opacity-100"
+            : chrome && directHover
+              ? "opacity-100"
+              : chrome
+                ? "opacity-0 focus-within:opacity-100"
+                : "opacity-0",
         )}
         style={{ top: box.top - 18, left: box.left }}
       >
@@ -145,8 +169,9 @@ const Overlay = forwardRef<
           <div className="ml-0.5 flex items-center rounded-sm bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
             <button
               type="button"
-              className="grid size-4 cursor-grab place-items-center text-zinc-400 active:cursor-grabbing"
-              title="Drag"
+              className="grid size-4 touch-none cursor-grab place-items-center text-zinc-400 active:cursor-grabbing"
+              title={`Drag ${label}`}
+              aria-label={`Drag ${label}`}
               {...attributes}
               {...listeners}
             >
@@ -318,9 +343,17 @@ export function EditorCanvas() {
                 {!isComponent ? <SectionGapDrop index={0} /> : null}
                 {page.sections.map((section, index) => {
                   const sectionSelected = selection.kind === "section" && selection.sectionId === section.id;
-                  const elementIds = slotDefs(section.type)
-                    .filter((slot) => slot.kind === "elements")
-                    .flatMap((slot) => elementsSlot(section, slot.id).map((element) => element.id));
+                  const instanceLocked = !isComponent && Boolean(section.componentId);
+                  const elementIds = slotDefs(section.type).flatMap((slot) => {
+                    if (slot.kind === "elements") {
+                      return elementsSlot(section, slot.id).map((element) => element.id);
+                    }
+                    if (slot.kind === "element") {
+                      const element = elementSlot(section, slot.id);
+                      return element ? [element.id] : [];
+                    }
+                    return [];
+                  });
                   return (
                     <div key={section.id}>
                     <Overlay
@@ -340,7 +373,6 @@ export function EditorCanvas() {
                           theme={page.theme}
                           interactive={false}
                           renderElement={(element: PageElement, slotId: string) => {
-                            const instanceLocked = !isComponent && Boolean(section.componentId);
                             const renderNested = (
                               node: PageElement,
                               nodeSlotId: string,
@@ -362,7 +394,12 @@ export function EditorCanvas() {
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
                                 fillWidth={fill}
                                 locked={!editable}
-                                data={{ sectionId: section.id, slotId: nodeSlotId, elementId: node.id }}
+                                data={{
+                                  sectionId: section.id,
+                                  slotId: nodeSlotId,
+                                  elementId: node.id,
+                                  elementType: node.type,
+                                }}
                                 onSelect={(event) => {
                                   if (!editable && !node.textSlot) {
                                     setSelection({ kind: "section", sectionId: section.id });
@@ -421,7 +458,12 @@ export function EditorCanvas() {
                             return renderNested(element, slotId);
                           }}
                           renderInsertGap={(slotId, atIndex) => (
-                            <ElementInsertDrop sectionId={section.id} slotId={slotId} index={atIndex} />
+                            <ElementInsertDrop
+                              sectionId={section.id}
+                              slotId={slotId}
+                              index={atIndex}
+                              disabled={instanceLocked}
+                            />
                           )}
                           renderEmptySlot={(slotId) => {
                             const def = slotDefs(section.type).find((slot) => slot.id === slotId) as
@@ -432,7 +474,7 @@ export function EditorCanvas() {
                               def.kind === "elements" ? elementsSlot(section, slotId).length > 0 : false;
                             // Filled slots rely on insert gaps / element drops — no permanent "Add to…" chrome.
                             if (filled) return null;
-                            return <EmptySlot sectionId={section.id} slot={def} />;
+                            return <EmptySlot sectionId={section.id} slot={def} disabled={instanceLocked} />;
                           }}
                         />
                       </SortableContext>
