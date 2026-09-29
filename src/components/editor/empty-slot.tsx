@@ -18,7 +18,7 @@ export function EmptySlot({
 }) {
   const { selection, setSelection } = useEditor();
   const selected = selection.kind === "slot" && selection.sectionId === sectionId && selection.slotId === slot.id;
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: `slot-${sectionId}-${slot.id}`,
     data: { kind: "slot", sectionId, slotId: slot.id, accept: slot.accept },
     disabled,
@@ -27,6 +27,9 @@ export function EmptySlot({
   return (
     <button
       ref={setNodeRef}
+      data-page-export-remove
+      data-drop-slot={slot.id}
+      style={{ gridColumn: "1 / -1", minWidth: 0 }}
       type="button"
       disabled={disabled}
       onClick={(event) => {
@@ -35,9 +38,10 @@ export function EmptySlot({
       }}
       className={cn(
         "flex w-full min-h-11 items-center justify-center rounded-md border border-dashed px-3 py-3 text-[11px] transition",
-        isOver || selected
+        selected
           ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
           : "border-zinc-300 text-zinc-400 hover:border-[#0d99ff]/70",
+        "[[data-dragging]_&]:border-zinc-300 [[data-dragging]_&]:bg-transparent [[data-dragging]_&]:text-zinc-400",
         disabled && "cursor-not-allowed opacity-50",
       )}
     >

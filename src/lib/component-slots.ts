@@ -1,4 +1,6 @@
-import { cloneElementNode } from "@/lib/defaults";
+import { cloneElementNodes } from "@/lib/defaults";
+import { expressionText } from "@/lib/expressions";
+import { resolveVariablePath } from "@/lib/variables";
 import type { PageElement, PageSection, SlotValue } from "@/lib/types";
 
 function walkElements(elements: PageElement[], visit: (el: PageElement) => PageElement): PageElement[] {
@@ -41,9 +43,9 @@ export function applySlotOverrides(section: PageSection): PageSection {
       const name = typeof el.props.name === "string" ? el.props.name : el.id;
       const override = overrides[name] ?? overrides[el.id];
       if (Array.isArray(override)) {
-        next = { ...next, children: override.map(cloneElementNode) };
+        next = { ...next, children: cloneElementNodes(override, { namespace: `slot:${section.id}:${el.id}`, preserveStyleSource: true }) };
       } else if (override && typeof override === "object" && "type" in override) {
-        next = { ...next, children: [cloneElementNode(override as PageElement)] };
+        next = { ...next, children: cloneElementNodes([override as PageElement], { namespace: `slot:${section.id}:${el.id}`, preserveStyleSource: true }) };
       }
     }
     return next;
@@ -52,6 +54,7 @@ export function applySlotOverrides(section: PageSection): PageSection {
   return {
     ...section,
     slots: mapSlotTree(section.slots, visit),
+    elements: section.elements ? walkElements(section.elements, visit) : undefined,
   };
 }
 
@@ -78,23 +81,45 @@ export function collectSlotOverrides(section: PageSection): Record<string, SlotV
   return out;
 }
 
-export function bindTemplateText(text: string, item: Record<string, unknown>, index: number) {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
-    if (key === "index") return String(index + 1);
-    const value = item[key];
-    return value == null ? "" : String(value);
+export function listItemValues(item: unknown, index: number): Record<string, unknown> {
+  return { ...(item && typeof item === "object" && !Array.isArray(item) ? item : {}), item, index: index + 1 };
+}
+
+export function bindTemplateText(text: string, item: unknown, index: number) {
+  const values = listItemValues(item, index);
+  return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (token, path: string) => {
+    const value = resolveVariablePath(values, path);
+    return value === undefined ? token : expressionText(value);
   });
 }
 
-export function bindElementToItem(element: PageElement, item: Record<string, unknown>, index: number): PageElement {
-  const props = { ...element.props };
-  for (const [key, value] of Object.entries(props)) {
-    if (typeof value === "string") props[key] = bindTemplateText(value, item, index);
-  }
-  return {
-    ...element,
-    id: `${element.id}-${index}`,
-    props,
-    children: element.children?.map((child) => bindElementToItem(child, item, index)),
+/** Stable keyed rows survive reordering; duplicate keys are disambiguated by occurrence. Unkeyed rows use their index. */
+export function listItemKey(items: unknown[], index: number): string {
+  const keyFor = (item: unknown) => {
+    if (!item || typeof item !== "object") return undefined;
+    const record = item as Record<string, unknown>;
+    const key = record.id ?? record.key;
+    return typeof key === "string" || typeof key === "number" ? `${typeof key}:${key}` : undefined;
   };
+  const key = keyFor(items[index]);
+  return key === undefined ? `index:${index}` : `key:${JSON.stringify([key, items.slice(0, index).filter((item) => keyFor(item) === key).length])}`;
+}
+
+export function bindElementsToItem(
+  elements: PageElement[], item: unknown, index: number, namespace: string, interpolate = false,
+): PageElement[] {
+  const clones = cloneElementNodes(elements, { namespace, preserveStyleSource: true });
+  const bind = (element: PageElement): PageElement => ({
+    ...element,
+    props: Object.fromEntries(Object.entries(element.props).map(([key, value]) => [
+      key, typeof value === "string" ? bindTemplateText(value, item, index) : value,
+    ])),
+    // A nested list introduces a new item scope; do not consume its template tokens here.
+    children: element.type === "list" ? element.children : element.children?.map(bind),
+  });
+  return interpolate ? clones.map(bind) : clones;
+}
+
+export function bindElementToItem(element: PageElement, item: unknown, index: number): PageElement {
+  return bindElementsToItem([element], item, index, `repeat:${index}`, true)[0];
 }

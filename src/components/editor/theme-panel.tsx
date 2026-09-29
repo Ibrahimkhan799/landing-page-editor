@@ -42,7 +42,11 @@ export function ThemePanel() {
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs text-muted-foreground">Brand name</Label>
-          <Input value={theme.brandName} onChange={(event) => updateTheme({ brandName: event.target.value })} />
+          <Input
+            value={theme.brandName}
+            className="dark:bg-zinc-800 dark:text-zinc-100"
+            onChange={(event) => updateTheme({ brandName: event.target.value })}
+          />
         </div>
         <MediaPicker
           label="Logo"
@@ -65,7 +69,7 @@ export function ThemePanel() {
             value={theme.fonts.heading}
             onValueChange={(value) => updateTheme({ fonts: { heading: value } })}
           >
-            <SelectTrigger>
+            <SelectTrigger className="dark:bg-zinc-800 dark:text-zinc-100">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -80,7 +84,7 @@ export function ThemePanel() {
         <div className="grid gap-1.5">
           <Label className="text-xs text-muted-foreground">Body font</Label>
           <Select value={theme.fonts.body} onValueChange={(value) => updateTheme({ fonts: { body: value } })}>
-            <SelectTrigger>
+            <SelectTrigger className="dark:bg-zinc-800 dark:text-zinc-100">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -96,6 +100,7 @@ export function ThemePanel() {
           <Label className="text-xs text-muted-foreground">Corner radius ({theme.radius}px)</Label>
           <input
             type="range"
+            className="accent-zinc-900 dark:accent-zinc-200"
             min={0}
             max={32}
             value={theme.radius}

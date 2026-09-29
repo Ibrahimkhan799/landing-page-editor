@@ -80,10 +80,7 @@ function LiveTextHost({
   const [active, setActive] = useState(anim.trigger === "load");
 
   useEffect(() => {
-    if (anim.trigger === "load") {
-      setActive(true);
-      return;
-    }
+    if (anim.trigger === "load") return;
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -102,7 +99,7 @@ function LiveTextHost({
   }, [anim.trigger]);
 
   return (
-    <AnimPlaybackContext.Provider value={{ active, playKey: 0 }}>
+    <AnimPlaybackContext.Provider value={{ active: anim.trigger === "load" || active, playKey: 0 }}>
       <div
         ref={ref}
         className={cn(className)}
@@ -208,13 +205,15 @@ export function AnimateHost({
 }) {
   const preview = useStylePreview();
   const anim = node?.animation ?? null;
+  const animationPreset = anim?.preset;
+  const runtimeLive = preview.live || preview.interactivePreview;
   const textMode = Boolean(anim && isTextAnimation(anim.preset));
   const [playKey, setPlayKey] = useState(0);
   const [active, setActive] = useState(true);
 
   // Editor-only Play. Live page uses declarative motion — never remounts via setState.
   useEffect(() => {
-    if (preview.live || !node?.id || !anim) return;
+    if (runtimeLive || !node?.id || !animationPreset) return;
     const handler = (event: Event) => {
       const target = (event as CustomEvent<string>).detail;
       if (target && target !== node.id) return;
@@ -223,7 +222,7 @@ export function AnimateHost({
     };
     window.addEventListener("lp-play-anim", handler);
     return () => window.removeEventListener("lp-play-anim", handler);
-  }, [preview.live, node?.id, anim?.preset, anim?.trigger, anim?.duration, anim?.delay]);
+  }, [runtimeLive, node?.id, animationPreset, anim?.trigger, anim?.duration, anim?.delay]);
 
   useEffect(() => {
     if (playKey === 0) return;
@@ -239,7 +238,7 @@ export function AnimateHost({
 
   if (!node || !anim) return children;
 
-  if (preview.live) {
+  if (runtimeLive) {
     return (
       <LiveAnimateHost anim={anim} textMode={textMode} className={className} nodeId={node.id}>
         {children}

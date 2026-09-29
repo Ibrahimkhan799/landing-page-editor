@@ -16,7 +16,7 @@ export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
     { id: "eyebrow", label: "Eyebrow", kind: "text" },
     { id: "headline", label: "Headline", kind: "text" },
     { id: "subheadline", label: "Subheadline", kind: "text" },
-    { id: "media", label: "Media", kind: "element", accept: ["image", "video"] },
+    { id: "media", label: "Media", kind: "element", accept: ["image", "video", "svg"] },
     { id: "actions", label: "Actions", kind: "elements", accept: ["button"] },
     { id: "extra", label: "Extra elements", kind: "elements" },
   ],
@@ -34,7 +34,7 @@ export const SECTION_SLOTS: Record<SectionType, SlotDefinition[]> = {
     { id: "eyebrow", label: "Eyebrow", kind: "text" },
     { id: "headline", label: "Headline", kind: "text" },
     { id: "body", label: "Body", kind: "elements" },
-    { id: "media", label: "Media", kind: "element", accept: ["image", "video"] },
+    { id: "media", label: "Media", kind: "element", accept: ["image", "video", "svg"] },
     { id: "extra", label: "Extra elements", kind: "elements" },
   ],
   stats: [{ id: "extra", label: "Extra elements", kind: "elements" }],
@@ -137,7 +137,7 @@ export function parseFrameSlotId(slotId: string) {
 }
 
 export function isContainerElement(type: string | undefined) {
-  return type === "frame" || type === "slot" || type === "list";
+  return type === "frame" || type === "slot" || type === "list" || type === "conditional";
 }
 
 /** Built-in catalog sections are fixed components — not user-savable templates. */
@@ -202,10 +202,34 @@ export function isSlotEditableInInstance(section: PageSection, slotId: string) {
   const parentId = parseFrameSlotId(slotId);
   if (!parentId) return false;
   const found = findElementWithAncestors(section, parentId);
-  return Boolean(found && isInstanceSlotEditable(section, found.element, found.ancestors));
+  // Exposing a text prop does not expose that node's child structure.
+  return Boolean(found && (found.element.type === "slot" || found.ancestors.some((node) => node.type === "slot")));
 }
 
-export type ElementPlacementIssue = "cycle" | "invalid-type" | "locked" | "missing-target" | "occupied";
+export type ElementPlacementIssue = "cycle" | "invalid-type" | "locked" | "missing-target" | "occupied" | "branch-scaffold";
+
+/** Branches are ordinary frames; only their position under an IF is structural. */
+export function conditionalBranch(element: PageElement, parent?: PageElement): "then" | "else" | null {
+  if (parent?.type !== "conditional" || element.type !== "frame") return null;
+  return element.props.branch === "then" || element.props.branch === "else" ? element.props.branch : null;
+}
+
+/** Structural edits need permission on the parent, not just an overridable text prop. */
+export function getElementStructureIssue(
+  section: PageSection,
+  elementId: string,
+  options?: { allowComponentRoot?: boolean },
+): ElementPlacementIssue | null {
+  const found = findElement(section, elementId);
+  if (!found) return "missing-target";
+  const parent = found.parentId ? findElement(section, found.parentId)?.element : undefined;
+  if (conditionalBranch(found.element, parent)) return "branch-scaffold";
+  if (!options?.allowComponentRoot &&
+    (!isElementEditableInInstance(section, elementId) || !isSlotEditableInInstance(section, found.slotId))) {
+    return "locked";
+  }
+  return null;
+}
 
 export function getElementPlacementIssue(
   section: PageSection,
@@ -220,6 +244,8 @@ export function getElementPlacementIssue(
     const parent = findElement(section, parentId)?.element;
     if (!parent || !isContainerElement(parent.type)) return "missing-target";
     if (elementContains(element, parentId)) return "cycle";
+    // Insert into the Then/Else frame, never alongside the branch scaffold.
+    if (parent.type === "conditional") return "branch-scaffold";
     return null;
   }
 
@@ -246,6 +272,39 @@ export function findElement(
   elementId: string,
 ): { slotId: string; element: PageElement; parentId?: string } | null {
   return allSectionElements(section).find((item) => item.element.id === elementId) ?? null;
+}
+
+/** Resolve a real section slot or a container's virtual frame:<id> slot. */
+export function slotElements(section: PageSection, slotId: string): PageElement[] {
+  const parentId = parseFrameSlotId(slotId);
+  if (parentId) return findElement(section, parentId)?.element.children ?? [];
+  const value = section.slots?.[slotId];
+  if (Array.isArray(value)) return value;
+  return value && typeof value === "object" ? [value] : [];
+}
+
+/** Update nested children without ever materializing a virtual slot in section.slots. */
+export function replaceSlotElements(section: PageSection, slotId: string, elements: PageElement[]): PageSection {
+  const parentId = parseFrameSlotId(slotId);
+  if (!parentId) {
+    const def = slotDefs(section.type).find((slot) => slot.id === slotId);
+    if (!def || def.kind === "text" || (def.kind === "element" && elements.length > 1)) return section;
+    return setSlot(section, slotId, def.kind === "element" ? elements[0] ?? null : elements);
+  }
+  const parent = findElement(section, parentId)?.element;
+  if (!parent || !isContainerElement(parent.type)) return section;
+  function replace(node: PageElement): PageElement {
+    if (node.id === parentId) return { ...node, children: elements };
+    if (!node.children?.length) return node;
+    return { ...node, children: node.children.map(replace) };
+  }
+  const slots = { ...section.slots };
+  for (const def of slotDefs(section.type)) {
+    const value = slots[def.id];
+    if (Array.isArray(value)) slots[def.id] = value.map(replace);
+    else if (value && typeof value === "object") slots[def.id] = replace(value);
+  }
+  return { ...section, slots };
 }
 
 export function setSlot(section: PageSection, slotId: string, value: SlotValue): PageSection {

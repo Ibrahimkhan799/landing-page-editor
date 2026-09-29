@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Monitor, Moon, Smartphone, Sun, Tablet, Save, ArrowLeft } from "lucide-react";
+import { ArrowLeft, ExternalLink, Eye, Monitor, Moon, Save, Smartphone, Sun, Tablet } from "lucide-react";
 import { toast } from "sonner";
 import { EditorCanvas } from "@/components/editor/canvas";
 import { EditorDnd } from "@/components/editor/editor-dnd";
 import { isTypingTarget, useEditor } from "@/components/editor/editor-context";
+import { EditorThemeProvider } from "@/components/editor/editor-theme";
 import { Inspector } from "@/components/editor/inspector";
 import { LibrarySidebar } from "@/components/editor/library-sidebar";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import type { Breakpoint } from "@/lib/types";
 const DARK_KEY = "lp-editor-chrome-dark";
 
 export function EditorShell({ backHref }: { backHref?: string }) {
+  const router = useRouter();
   const {
     page,
     updatePage,
@@ -43,15 +46,35 @@ export function EditorShell({ backHref }: { backHref?: string }) {
 
   const isComponent = editorMode === "component";
   const backTo = backHref || "/admin";
+  const componentRouteKey = page.sections
+    .map((section) => section.componentId)
+    .filter((id): id is string => Boolean(id))
+    .filter((id, index, ids) => ids.indexOf(id) === index)
+    .sort()
+    .join(",");
   const [dark, setDark] = useState(false);
+  const [livePreview, setLivePreview] = useState(false);
 
   useEffect(() => {
-    try {
-      setDark(window.localStorage.getItem(DARK_KEY) === "1");
-    } catch {
-      /* ignore */
-    }
+    const timeout = window.setTimeout(() => {
+      try {
+        setDark(window.localStorage.getItem(DARK_KEY) === "1");
+      } catch {
+        /* ignore */
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    if (isComponent) {
+      router.prefetch(backTo);
+      return;
+    }
+    for (const componentId of componentRouteKey.split(",").filter(Boolean)) {
+      router.prefetch(`/admin/component/${componentId}?from=${encodeURIComponent(page.id)}`);
+    }
+  }, [backTo, componentRouteKey, isComponent, page.id, router]);
 
   function toggleDark() {
     setDark((current) => {
@@ -84,6 +107,10 @@ export function EditorShell({ backHref }: { backHref?: string }) {
       if (meta && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void persist();
+        return;
+      }
+      if (livePreview) {
+        if (event.key === "Escape") setLivePreview(false);
         return;
       }
       if (isTypingTarget(event.target)) return;
@@ -129,6 +156,7 @@ export function EditorShell({ backHref }: { backHref?: string }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
+    livePreview,
     selectedSection,
     selectedElement,
     selectedRefs,
@@ -146,12 +174,18 @@ export function EditorShell({ backHref }: { backHref?: string }) {
     persist,
   ]);
 
-  // Dark class only on chrome — never wrap the canvas so landing/shadcn stay light.
+  // Theme context reaches portaled editor UI without adding a dark ancestor around the landing page.
   return (
-    <div className="editor-ui flex h-screen flex-col bg-zinc-100 text-zinc-900">
+    <EditorThemeProvider dark={dark}>
+      <div
+        className={cn(
+          "editor-ui flex h-screen flex-col",
+          dark ? "bg-zinc-950 text-zinc-100" : "bg-zinc-100 text-zinc-900",
+        )}
+      >
       <header
         className={cn(
-          "flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2",
+          "editor-ui flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2",
           dark && "dark border-zinc-800 bg-zinc-950 text-zinc-100",
         )}
       >
@@ -171,6 +205,24 @@ export function EditorShell({ backHref }: { backHref?: string }) {
           ) : null}
         </div>
         {dirty ? <span className="text-[11px] text-zinc-400">Unsaved</span> : null}
+        <button
+          type="button"
+          title={livePreview ? "Return to editing" : "Preview interactions in the editor"}
+          aria-pressed={livePreview}
+          className={cn(
+            "flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium",
+            livePreview
+              ? "bg-[#0d99ff] text-white"
+              : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
+          )}
+          onClick={() => {
+            setPreviewState("default");
+            setLivePreview((current) => !current);
+          }}
+        >
+          <Eye className="size-3.5" />
+          {livePreview ? "Exit live" : "Live"}
+        </button>
         <button
           type="button"
           title={dark ? "Light editor" : "Dark editor"}
@@ -232,12 +284,13 @@ export function EditorShell({ backHref }: { backHref?: string }) {
           <div className={cn("contents", dark && "dark")}>
             <LibrarySidebar />
           </div>
-          <EditorCanvas />
+          <EditorCanvas livePreview={livePreview} />
           <div className={cn("contents", dark && "dark")}>
             <Inspector />
           </div>
         </EditorDnd>
+        </div>
       </div>
-    </div>
+    </EditorThemeProvider>
   );
 }

@@ -15,10 +15,20 @@ export function useComputedStyles(nodeId: string | null, revision: unknown, rese
   useEffect(() => {
     if (!nodeId) return;
     let cancelled = false;
+    let observed: HTMLElement | null = null;
+    const observer = new ResizeObserver(() => schedule());
+    let pending = 0;
+    const schedule = () => {
+      if (!pending) pending = requestAnimationFrame(read);
+    };
     const read = () => {
-      const matches = [
-        ...document.querySelectorAll(`[data-editor-node="${CSS.escape(nodeId)}"]`),
-      ] as HTMLElement[];
+      pending = 0;
+      const selector = `[data-editor-node="${CSS.escape(nodeId)}"]`;
+      // Never inspect an iframe while the editing canvas exists, even if the
+      // selected node is absent there (e.g. a hidden node or stale selection).
+      const root = document.querySelector("[data-editor-canvas]") ??
+        document.querySelector<HTMLIFrameElement>("[data-editor-preview-frame]")?.contentDocument ?? document;
+      const matches = [...root.querySelectorAll<HTMLElement>(selector)];
       const el =
         matches.find(
           (node) =>
@@ -26,21 +36,32 @@ export function useComputedStyles(nodeId: string | null, revision: unknown, rese
             node.matches("span,a,h1,h2,h3,h4,p,img,video,label,button,input,textarea,section,header,footer,div"),
         ) ?? matches[0];
       if (!el || cancelled) return;
+      if (observed !== el) {
+        observer.disconnect();
+        observer.observe(el);
+        observed = el;
+      }
       setSnapshot({
         id: nodeId,
         resetKey,
         computed: readComputedStyleProps(el),
         box: {
-          width: Math.round(el.getBoundingClientRect().width),
-          height: Math.round(el.getBoundingClientRect().height),
+          // offset sizes are CSS pixels, unaffected by canvas zoom/transform.
+          width: el.offsetWidth,
+          height: el.offsetHeight,
         },
       });
     };
-    const frame = requestAnimationFrame(read);
-    const later = window.setTimeout(read, 80);
+    schedule();
+    const later = window.setTimeout(schedule, 80);
+    window.addEventListener("resize", schedule);
+    document.addEventListener("editor-viewport-styles", schedule);
     return () => {
       cancelled = true;
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(pending);
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("editor-viewport-styles", schedule);
       window.clearTimeout(later);
     };
   }, [nodeId, revision, resetKey]);

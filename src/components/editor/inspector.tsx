@@ -8,7 +8,9 @@ import { BookmarkPlus, Component, Copy, ExternalLink, Trash2, Unlink } from "luc
 import Link from "next/link";
 import { useEditor } from "@/components/editor/editor-context";
 import { MediaPicker } from "@/components/editor/media-picker";
+import { PageTransferControls } from "@/components/editor/page-transfer-controls";
 import { AnimationEditor } from "@/components/editor/animation-editor";
+import { LogicEditor } from "@/components/editor/logic-editor";
 import { NodeMetaEditor } from "@/components/editor/style-editor";
 import { ThemePanel } from "@/components/editor/theme-panel";
 import { useComputedStyles } from "@/components/editor/use-computed-styles";
@@ -70,10 +72,10 @@ export function Inspector() {
   const multi = selectedElements.length > 1;
 
   return (
-    <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <aside className="editor-ui flex h-full w-64 shrink-0 flex-col border-l border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
       <Tabs defaultValue="style" className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-zinc-200 px-2 py-1.5 dark:border-zinc-800">
-          <TabsList className="grid h-7 w-full grid-cols-4 bg-zinc-100 p-0.5 dark:bg-zinc-900">
+          <TabsList className="grid h-7 w-full grid-cols-5 bg-zinc-100 p-0.5 dark:bg-zinc-900">
             <TabsTrigger value="content" className="h-6 text-[11px]">
               Content
             </TabsTrigger>
@@ -85,6 +87,9 @@ export function Inspector() {
             </TabsTrigger>
             <TabsTrigger value="theme" className="h-6 text-[11px]">
               Theme
+            </TabsTrigger>
+            <TabsTrigger value="logic" className="h-6 text-[11px]">
+              Logic
             </TabsTrigger>
           </TabsList>
         </div>
@@ -117,13 +122,20 @@ export function Inspector() {
         <TabsContent value="theme" className="mt-0 min-h-0 flex-1">
           <ThemePanel />
         </TabsContent>
+        <TabsContent value="logic" className="mt-0 min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <div className="p-3">
+              <LogicEditor />
+            </div>
+          </ScrollArea>
+        </TabsContent>
       </Tabs>
     </aside>
   );
 }
 
 function PageFields() {
-  const { page, updatePage } = useEditor();
+  const { page, updatePage, editorMode } = useEditor();
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold">Page settings</h3>
@@ -142,6 +154,7 @@ function PageFields() {
         </Select>
       </Field>
       <p className="text-xs text-muted-foreground">Select a section or element on the canvas. Slots fill with text or elements.</p>
+      {editorMode === "page" ? <PageTransferControls /> : null}
     </div>
   );
 }
@@ -237,8 +250,8 @@ function SectionFields({ slotId }: { slotId: string | null }) {
         onChange={(value) => updateSection(selectedSection.id, { name: value })}
       />
       {!isComponentEditor && selectedSection.componentId ? (
-        <div className="space-y-2 rounded-md border border-violet-200 bg-violet-50 p-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-violet-900">
+        <div className="space-y-2 rounded-md border border-violet-200 bg-violet-50 p-2 dark:border-violet-900 dark:bg-violet-950/40">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-violet-900 dark:text-violet-200">
             <Component className="size-3.5" />
             Component instance
           </div>
@@ -270,7 +283,7 @@ function SectionFields({ slotId }: { slotId: string | null }) {
       <Separator />
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Slots</p>
       {slotId ? (
-        <p className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+        <p className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
           Slot selected: {slotDefs(selectedSection.type).find((slot) => slot.id === slotId)?.label ?? slotId}. Drop an
           element here or add one from the library.
         </p>
@@ -358,7 +371,7 @@ function ElementFields() {
       name,
       element: { ...selectedElement, id: nanoid(10) },
     });
-    const { id: _id, ...section } = block;
+    const section = { ...block, id: undefined };
     const response = await fetch("/api/components", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -372,7 +385,11 @@ function ElementFields() {
     toast.success("Component created", {
       action: {
         label: "Edit",
-        onClick: () => router.push(`/admin/component/${saved.id}?from=${encodeURIComponent(page.id)}`),
+        onClick: () => {
+          const href = `/admin/component/${saved.id}?from=${encodeURIComponent(page.id)}`;
+          router.prefetch(href);
+          router.push(href);
+        },
       },
     });
   }
@@ -414,7 +431,7 @@ function ElementFields() {
         </div>
       </div>
       {selectedElement.textSlot ? (
-        <p className="rounded-md border border-teal-200 bg-teal-50 px-2 py-1.5 text-[11px] text-teal-800">
+        <p className="rounded-md border border-teal-200 bg-teal-50 px-2 py-1.5 text-[11px] text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
           Text slot · {selectedElement.textSlot.label} ({selectedElement.textSlot.prop})
         </p>
       ) : typeof selectedElement.props.text === "string" ||
@@ -552,7 +569,7 @@ function ElementFields() {
                 : key
             }
             value={value}
-            multiline={key === "text" || key === "body" || key === "options"}
+            multiline={key === "text" || key === "body" || key === "options" || key === "markup"}
             onChange={(next) => updateElementProp(selectedSection.id, selectedElement.id, key, next)}
           />
         );
@@ -634,7 +651,7 @@ function StyleTab() {
   return (
     <div className="space-y-3">
       {showStates ? (
-        <div className="grid grid-cols-4 gap-0.5 rounded-md bg-zinc-100 p-0.5">
+        <div className="grid grid-cols-4 gap-0.5 rounded-md bg-zinc-100 p-0.5 dark:bg-zinc-800">
           {states.map((item) => (
             <button
               key={item.id}
@@ -642,7 +659,9 @@ function StyleTab() {
               onClick={() => setPreviewState(item.id)}
               className={cn(
                 "h-6 rounded text-[10px] font-medium",
-                previewState === item.id ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500",
+                previewState === item.id
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                  : "text-zinc-500 dark:text-zinc-400",
               )}
             >
               {item.label}

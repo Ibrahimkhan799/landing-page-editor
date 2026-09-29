@@ -57,14 +57,14 @@ export function ShadowPopover({
   return (
     <div className="grid gap-1">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-zinc-500">Shadow</p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Shadow</p>
         {!stored && preview ? (
           <span className="text-[10px] uppercase tracking-wide text-zinc-400">Computed</span>
         ) : null}
       </div>
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left">
+          <button type="button" className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left dark:bg-zinc-800 dark:text-zinc-200">
             <ColorSwatch color={preview ? parsed.color : ""} />
             <span className="flex-1 truncate text-[11px]">
               {preview ? `${parsed.inset ? "Inner · " : ""}${parsed.x}, ${parsed.y}, ${parsed.blur}` : "None"}
@@ -78,12 +78,12 @@ export function ShadowPopover({
               None
             </button>
           </div>
-          <div className="w-full px-4 py-4 rounded-md border border-zinc-200 bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%,transparent_75%,#f4f4f5_75%),linear-gradient(45deg,#f4f4f5_25%,white_25%,white_75%,#f4f4f5_75%)] bg-[length:10px_10px] bg-[position:0_0,5px_5px] my-3">
+          <div className="editor-checkerboard my-3 w-full rounded-md border border-zinc-200 px-4 py-4 dark:border-zinc-700">
             <div
-              className="grid h-10 place-items-center rounded-sm bg-zinc-100"
+              className="grid h-10 place-items-center rounded-sm bg-zinc-100 dark:bg-zinc-800"
               style={{ boxShadow: serializeShadow(parsed) }}
             >
-              <div className="size-6 rounded-sm bg-white" />
+              <div className="size-6 rounded-sm bg-white dark:bg-zinc-200" />
             </div>
           </div>
           <SliderRow label="X" value={parsed.x} min={-40} max={40} onChange={(x) => update({ x })} />
@@ -91,7 +91,7 @@ export function ShadowPopover({
           <SliderRow label="Blur" value={parsed.blur} min={0} max={80} onChange={(blur) => update({ blur })} />
           <SliderRow label="Spread" value={parsed.spread} min={-20} max={40} onChange={(spread) => update({ spread })} />
           <div className="flex items-center justify-between">
-            <Label className="text-[11px] text-zinc-500">Inner</Label>
+            <Label className="text-[11px] text-zinc-500 dark:text-zinc-400">Inner</Label>
             <Switch checked={parsed.inset} onCheckedChange={(inset) => update({ inset })} />
           </div>
           <ColorPickerBody color={parsed.color} onChange={(color) => update({ color })} />

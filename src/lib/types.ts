@@ -15,7 +15,10 @@ export type ElementType =
   | "card"
   | "frame"
   | "slot"
-  | "list";
+  | "list"
+  | "shape"
+  | "svg"
+  | "conditional";
 
 export type SectionType =
   | "navbar"
@@ -93,6 +96,7 @@ export type StyleProps = {
   padding?: Partial<BoxEdges>;
   margin?: Partial<BoxEdges>;
   color?: string;
+  textGradient?: string;
   background?: string;
   backgroundImage?: string;
   fontFamily?: string;
@@ -151,6 +155,52 @@ export type InteractionStates = {
   disabled?: StyleProps;
 };
 
+export type VariableType = "text" | "number" | "boolean" | "array" | "object";
+
+export type ValueBinding =
+  | { mode: "variable"; variableId: string; path?: string }
+  | { mode: "expression"; expression: string };
+
+export type ValueSchema = {
+  type: VariableType;
+  items?: ValueSchema;
+  fields?: Record<string, ValueSchema>;
+};
+
+export type VariableDefinition = {
+  id: string;
+  name: string;
+  type: VariableType;
+  value: unknown;
+  schema?: ValueSchema;
+};
+
+export type InteractionTrigger =
+  | "click"
+  | "input"
+  | "change"
+  | "keydown"
+  | "drag-start"
+  | "drag-end";
+
+export type InteractionAction =
+  | { type: "set-variable"; variableName: string; value: unknown; binding?: ValueBinding }
+  | { type: "toggle-variable"; variableName: string }
+  | { type: "remove-element"; targetId: string }
+  | {
+      type: "change-style";
+      targetId: string;
+      property: keyof StyleProps | `padding.${keyof BoxEdges}` | `margin.${keyof BoxEdges}`;
+      value: unknown;
+    };
+
+export type InteractionBinding = {
+  id: string;
+  trigger: InteractionTrigger;
+  key?: string;
+  action: InteractionAction;
+};
+
 export type AnimationTrigger = "in-view" | "in-view-replay" | "load" | "loop";
 
 export type AnimationPreset =
@@ -190,12 +240,16 @@ export type AnimationConfig = {
 };
 
 export type NodeMeta = {
+  /** Original template node whose responsive/state CSS applies to this runtime instance. */
+  styleSourceId?: string;
   className?: string;
   htmlId?: string;
   styles?: StyleProps;
   responsive?: StyleOverrides;
   states?: InteractionStates;
   animation?: AnimationConfig | null;
+  variables?: VariableDefinition[];
+  interactions?: InteractionBinding[];
 };
 
 /** Marks a prop on an element as an overridable text slot when used as a component instance. */
@@ -209,6 +263,7 @@ export type PageElement = NodeMeta & {
   id: string;
   type: ElementType;
   props: Record<string, unknown>;
+  bindings?: Record<string, ValueBinding>;
   children?: PageElement[];
   /** When set, this element's prop becomes a fillable text slot on component instances. */
   textSlot?: ElementTextSlot | null;
@@ -235,6 +290,7 @@ export type LandingPage = {
   clientName: string;
   status: PageStatus;
   theme: ThemeConfig;
+  variables?: VariableDefinition[];
   sections: PageSection[];
   createdAt: string;
   updatedAt: string;

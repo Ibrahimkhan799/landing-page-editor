@@ -71,7 +71,7 @@ function SectionShell({
       <section
         data-editor-node={node?.id}
         id={node?.htmlId || id}
-        className={cn(contained && "px-6 py-16 md:px-10 md:py-24", className, node?.className)}
+        className={cn("relative", contained && "px-6 py-16 md:px-10 md:py-24", className, node?.className)}
         style={{ backgroundColor: muted ? "var(--lp-muted)" : "var(--lp-bg)", ...nodeCss }}
       >
         {contained ? <div className="mx-auto w-full max-w-6xl">{children}</div> : children}
@@ -117,7 +117,7 @@ export function LandingSection({
         {items.length && renderInsertGap ? renderInsertGap(slotId, 0) : null}
         {items.map((element, index) => (
           <Fragment key={element.id}>
-            <div>{renderEl(element, slotId)}</div>
+            <div className="contents">{renderEl(element, slotId)}</div>
             {renderInsertGap?.(slotId, index + 1)}
           </Fragment>
         ))}
@@ -145,7 +145,7 @@ export function LandingSection({
             <BrandMark theme={theme} />
             <nav className="hidden items-center gap-1 text-sm md:flex" style={{ color: "var(--lp-muted-fg)" }}>
               {extras("links").map((element) => (
-                <div key={element.id}>{renderEl(element, "links")}</div>
+                <div key={element.id} className="contents">{renderEl(element, "links")}</div>
               ))}
               {empty("links")}
             </nav>
@@ -171,7 +171,7 @@ export function LandingSection({
             </p>
             <div className={cn("flex flex-wrap gap-3", align === "center" && "justify-center")}>
               {extras("actions").map((element) => (
-                <div key={element.id}>{renderEl(element, "actions")}</div>
+                <div key={element.id} className="contents">{renderEl(element, "actions")}</div>
               ))}
               {empty("actions")}
             </div>
@@ -197,7 +197,7 @@ export function LandingSection({
               </p>
               <div className="flex flex-wrap gap-3">
                 {extras("actions").map((element) => (
-                  <div key={element.id}>{renderEl(element, "actions")}</div>
+                  <div key={element.id} className="contents">{renderEl(element, "actions")}</div>
                 ))}
                 {empty("actions")}
               </div>
@@ -216,7 +216,7 @@ export function LandingSection({
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-lg font-semibold opacity-80">
             {extras("logos").map((element) => (
-              <div key={element.id}>{renderEl(element, "logos")}</div>
+              <div key={element.id} className="contents">{renderEl(element, "logos")}</div>
             ))}
             {empty("logos")}
           </div>
@@ -373,7 +373,7 @@ export function LandingSection({
                 </ul>
                 <a
                   href="#contact"
-                  className="mt-6 inline-flex h-10 items-center justify-center rounded-[var(--lp-radius)] px-4 text-sm font-medium"
+                  className="mt-6 inline-flex h-10 items-center justify-center rounded-(--lp-radius) px-4 text-sm font-medium"
                   style={{
                     backgroundColor: plan.highlighted ? "var(--lp-primary)" : "var(--lp-muted)",
                     color: plan.highlighted ? "var(--lp-primary-fg)" : "var(--lp-fg)",
@@ -531,7 +531,7 @@ export function LandingSection({
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--lp-muted-fg)" }}>
               {extras("links").map((element) => (
-                <div key={element.id}>{renderEl(element, "links")}</div>
+                <div key={element.id} className="contents">{renderEl(element, "links")}</div>
               ))}
               {empty("links")}
             </div>

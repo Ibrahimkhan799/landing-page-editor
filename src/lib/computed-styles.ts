@@ -88,9 +88,29 @@ function mapWeight(value: string) {
   return value;
 }
 
+function splitBackgroundLayers(value: string) {
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "(") depth += 1;
+    if (value[index] === ")") depth = Math.max(0, depth - 1);
+    if (value[index] === "," && depth === 0) {
+      layers.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  if (value) layers.push(value.slice(start).trim());
+  return layers.filter(Boolean);
+}
+
 export function readComputedStyleProps(el: HTMLElement): StyleProps {
   const cs = getComputedStyle(el);
   const backgroundImage = cs.backgroundImage !== "none" ? cs.backgroundImage : "";
+  const layers = splitBackgroundLayers(backgroundImage);
+  const hasTextGradient = cs.backgroundClip.split(",").some((clip) => clip.trim() === "text");
+  const textGradient = hasTextGradient ? layers[0] || "" : "";
+  const elementBackgroundImage = hasTextGradient ? layers.slice(1).join(", ") : backgroundImage;
   const color = opaqueColor(el);
   const background = opaqueFill(el);
   const borderColor = rgbToHex(cs.borderTopColor);
@@ -120,8 +140,9 @@ export function readComputedStyleProps(el: HTMLElement): StyleProps {
       left: cs.marginLeft,
     },
     color,
+    textGradient,
     background,
-    backgroundImage,
+    backgroundImage: elementBackgroundImage,
     fontFamily: cs.fontFamily,
     fontSize: cs.fontSize,
     fontWeight: mapWeight(cs.fontWeight),

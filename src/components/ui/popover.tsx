@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { useEditorTheme } from "@/components/editor/editor-theme";
 import { cn } from "@/lib/utils";
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -20,6 +21,7 @@ function PopoverContent({
   collisionPadding = 24,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  const editorDark = useEditorTheme();
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -31,6 +33,7 @@ function PopoverContent({
         sticky="partial"
         className={cn(
           "editor-ui z-50 w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-md outline-none",
+          editorDark && "dark border-zinc-700 bg-zinc-900 text-zinc-100",
           className,
         )}
         {...props}

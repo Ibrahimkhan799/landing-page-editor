@@ -1,7 +1,8 @@
 "use client";
 
 import { useDndContext, useDroppable } from "@dnd-kit/core";
-import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
+import { measuredLayout, verticalLayout } from "@/components/editor/layout-drop";
 
 export function SectionGapDrop({ index }: { index: number }) {
   const { active } = useDndContext();
@@ -14,34 +15,15 @@ export function SectionGapDrop({ index }: { index: number }) {
       activeKind !== "library-component" &&
       activeKind !== "library-element",
   );
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: `section-gap-${index}`,
     data: { kind: "section-gap", atIndex: index },
     disabled,
   });
 
   return (
-    <div className="relative mx-auto h-2 max-w-6xl">
-      <div
-        ref={setNodeRef}
-        className="group pointer-events-none absolute -inset-y-2 inset-x-0 z-6 flex items-center justify-center"
-      >
-        <div
-          className={cn(
-            "h-0.5 w-full rounded-full bg-transparent transition-colors duration-100",
-            disabled
-              ? "bg-transparent"
-              : isOver
-                ? "bg-[#0d99ff]"
-                : "in-data-dragging:bg-zinc-300 group-hover:bg-zinc-300",
-          )}
-        />
-        {isOver ? (
-          <span className="pointer-events-none absolute rounded-full bg-[#0d99ff] px-2 py-0.5 text-[10px] font-medium text-white">
-            Insert here
-          </span>
-        ) : null}
-      </div>
+    <div data-page-export-remove className="relative mx-auto h-2 max-w-6xl">
+      <div ref={setNodeRef} className="pointer-events-none absolute -inset-y-2 inset-x-0 z-6" />
     </div>
   );
 }
@@ -59,45 +41,55 @@ export function ElementInsertDrop({
 }) {
   const { active } = useDndContext();
   const activeKind = (active?.data.current as { kind?: string } | undefined)?.kind;
+  const host = useRef<HTMLDivElement | null>(null);
+  const [layout, setLayout] = useState(verticalLayout);
+  useEffect(() => {
+    const node = host.current;
+    if (!node) return;
+    const read = () => {
+      const next = measuredLayout(node);
+      setLayout((current) => current.axis === next.axis && current.mode === next.mode && current.reverse === next.reverse ? current : next);
+    };
+    const frame = requestAnimationFrame(read);
+    document.addEventListener("editor-viewport-styles", read);
+    const resize = new ResizeObserver(read);
+    if (node.parentElement) resize.observe(node.parentElement);
+    const observer = new MutationObserver(read);
+    if (node.parentElement) observer.observe(node.parentElement, { attributes: true, attributeFilter: ["class", "style"] });
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("editor-viewport-styles", read);
+      resize.disconnect();
+      observer.disconnect();
+    };
+  }, []);
   const dropDisabled =
-    disabled ||
+    disabled || layout.mode === "grid" ||
     Boolean(
       activeKind &&
         activeKind !== "element" &&
         activeKind !== "layer-element" &&
         activeKind !== "library-element",
     );
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: `element-insert-${sectionId}-${slotId}-${index}`,
-    data: { kind: "element-insert", sectionId, slotId, atIndex: index },
+    data: { kind: "element-insert", sectionId, slotId, atIndex: index, layout },
     disabled: dropDisabled,
   });
 
   return (
-    <div className="relative h-1.5 w-full">
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "pointer-events-none absolute -inset-y-1.5 inset-x-0 z-6 flex items-center justify-center",
-          dropDisabled && "pointer-events-none",
-        )}
-      >
-        <div
-          className={cn(
-            "h-px w-full transition-colors duration-100",
-            dropDisabled
-              ? "bg-transparent"
-              : isOver
-                ? "bg-[#0d99ff]"
-                : "bg-transparent in-data-dragging:bg-zinc-200",
-          )}
-        />
-        {isOver ? (
-          <span className="pointer-events-none absolute rounded-full bg-[#0d99ff] px-2 py-0.5 text-[10px] font-medium text-white">
-            Insert here
-          </span>
-        ) : null}
-      </div>
+    <div
+      ref={host}
+      data-page-export-remove
+      data-drop-axis={layout.axis}
+      // A gap must not become an extra grid cell. Grid placement is measured
+      // against the real items by the shared resolver instead.
+      style={layout.mode === "grid" ? { display: "none" } : undefined}
+      className={layout.axis === "x" ? "relative w-1.5 shrink-0 self-stretch" : "relative h-1.5 w-full shrink-0"}
+    >
+      <div ref={setNodeRef} className={layout.axis === "x"
+        ? "pointer-events-none absolute -inset-x-1.5 inset-y-0 z-6"
+        : "pointer-events-none absolute -inset-y-1.5 inset-x-0 z-6"} />
     </div>
   );
 }

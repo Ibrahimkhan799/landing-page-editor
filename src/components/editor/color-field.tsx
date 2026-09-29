@@ -35,7 +35,7 @@ export function ColorSwatch({
   return (
     <span
       className={cn(
-        "inline-block size-3.5 shrink-0 rounded-[3px] bg-[length:7px_7px] ring-1 ring-black/10",
+        "inline-block size-3.5 shrink-0 rounded-[3px] bg-[length:7px_7px] ring-1 ring-black/10 dark:ring-white/20",
         className,
       )}
       style={{
@@ -73,7 +73,7 @@ export function ColorPickerBody({
           prefixed
           color={hex}
           onChange={(next) => onChange(paintValue(next, alpha))}
-          className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1.5 font-mono text-[10px] uppercase outline-none"
+          className="h-5 min-w-0 flex-1 rounded-[3px] border-0 bg-zinc-100 px-1.5 font-mono text-[10px] uppercase outline-none dark:bg-zinc-800 dark:text-zinc-200"
         />
         <MiniInput
           width="w-12"
@@ -136,7 +136,7 @@ export function ColorField({
     <div className={cn("grid gap-1", compact && "gap-0")}>
       {compact ? null : (
         <div className="flex items-center justify-between">
-          <Label className="text-[11px] text-zinc-500">{label}</Label>
+          <Label className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</Label>
           {inherited ? <span className="text-[10px] uppercase tracking-wide text-zinc-400">Computed</span> : null}
         </div>
       )}
@@ -144,17 +144,17 @@ export function ColorField({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-6 w-full items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70"
+            className="flex h-6 w-full items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
           >
             <ColorSwatch color={value || live} />
             <span className={cn("flex-1 font-mono text-[11px]", inherited && "text-zinc-400")}>{shown}</span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-2.5 shadow-xl">
+        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-2.5 shadow-xl dark:border-zinc-700">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-medium text-zinc-700">{label}</p>
+            <p className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{label}</p>
             {stored ? (
-              <button type="button" className="text-[11px] text-zinc-400 hover:text-zinc-700" onClick={() => onChange("")}>
+              <button type="button" className="text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => onChange("")}>
                 Reset
               </button>
             ) : null}

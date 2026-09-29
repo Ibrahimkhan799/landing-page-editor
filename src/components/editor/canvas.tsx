@@ -1,8 +1,8 @@
 "use client";
 
-import type { MouseEvent, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   AlignCenter,
@@ -10,24 +10,30 @@ import {
   AlignRight,
   Copy,
   GripVertical,
+  Maximize2,
+  Minus,
   MoveHorizontal,
   MoveVertical,
+  Plus,
   Trash2,
 } from "lucide-react";
 import { EmptySlot } from "@/components/editor/empty-slot";
 import { CanvasEditorContextMenu } from "@/components/editor/editor-context-menu";
 import { FrameDropZone } from "@/components/editor/frame-drop-zone";
 import { ElementInsertDrop, SectionGapDrop } from "@/components/editor/insert-gaps";
-import { useEditor } from "@/components/editor/editor-context";
+import { isTypingTarget, useEditor } from "@/components/editor/editor-context";
+import { useEditorTheme } from "@/components/editor/editor-theme";
 import { AnimateHost, AnimationStyles } from "@/components/landing/animate";
-import { LandingElement } from "@/components/landing/elements";
+import { LandingElement, sanitizeSvgMarkup } from "@/components/landing/elements";
+import { PreviewFrame, useEditViewportStyles } from "@/components/editor/preview-frame";
 import { LandingSection } from "@/components/landing/sections";
 import { StylePreviewProvider } from "@/components/landing/style-preview";
-import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
+import { resolveNodeStyles } from "@/lib/node-styles";
 import {
   elementsSlot,
   elementSlot,
   frameSlotId,
+  getElementStructureIssue,
   isContainerElement,
   isInstanceSlotEditable,
   slotDefs,
@@ -35,7 +41,50 @@ import {
 } from "@/lib/slots";
 import { themeStyle } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import type { AlignKind, PageElement, SlotDefinition } from "@/lib/types";
+import type { AlignKind, PageElement, SlotDefinition, StyleProps } from "@/lib/types";
+
+// Placement is shown by a measured insertion hint. List transforms assume a
+// single axis and move nested/grid targets out from under the pointer.
+const canvasSortingStrategy = () => null;
+
+const positionedKeys = ["position", "top", "right", "bottom", "left", "zIndex"] as const;
+
+function withoutPositioning(styles?: StyleProps): StyleProps | undefined {
+  if (!styles) return styles;
+  const next = { ...styles };
+  for (const key of positionedKeys) delete next[key];
+  return next;
+}
+
+function editorPositionedNode(node: PageElement, resolved: StyleProps) {
+  if (resolved.position !== "absolute" && resolved.position !== "fixed") {
+    return { displayNode: node, layoutStyle: undefined };
+  }
+  const layoutStyle: CSSProperties = {
+    position: "absolute",
+    top: resolved.top || undefined,
+    right: resolved.right || undefined,
+    bottom: resolved.bottom || undefined,
+    left: resolved.left || undefined,
+    zIndex: resolved.zIndex || undefined,
+  };
+  return {
+    layoutStyle,
+    displayNode: {
+      ...node,
+      styles: withoutPositioning(node.styles),
+      responsive: {
+        tablet: withoutPositioning(node.responsive?.tablet),
+        mobile: withoutPositioning(node.responsive?.mobile),
+      },
+    },
+  };
+}
+
+function svgFromTransfer(value: string) {
+  const match = value.match(/<svg\b[\s\S]*?<\/svg>/i);
+  return match?.[0] ?? "";
+}
 
 const Overlay = forwardRef<
   HTMLDivElement,
@@ -50,17 +99,21 @@ const Overlay = forwardRef<
     inactive?: boolean;
     fillWidth?: boolean;
     locked?: boolean;
+    dragDisabled?: boolean;
     data: Record<string, unknown>;
+    layoutStyle?: CSSProperties;
     children: ReactNode;
   }
 >(function Overlay(
-  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, fillWidth, locked, data, children },
+  { id, kind, selected, label, onSelect, onDuplicate, onRemove, inactive, fillWidth, locked, dragDisabled, data, layoutStyle, children },
   forwardedRef,
 ) {
+  const dark = useEditorTheme();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     data: { kind, ...data },
-    disabled: Boolean(locked),
+    // Protected branch frames remain targets for their editable contents.
+    disabled: { draggable: Boolean(locked || dragDisabled), droppable: Boolean(locked) },
   });
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ top: 0, left: 0, width: 0, height: 0, radius: "0px" });
@@ -82,11 +135,13 @@ const Overlay = forwardRef<
       const paint = (root.querySelector("[data-editor-node]") as HTMLElement | null) ?? root;
       const rootRect = root.getBoundingClientRect();
       const paintRect = paint.getBoundingClientRect();
+      const scaleX = root.offsetWidth ? rootRect.width / root.offsetWidth : 1;
+      const scaleY = root.offsetHeight ? rootRect.height / root.offsetHeight : scaleX;
       setBox({
-        top: paintRect.top - rootRect.top,
-        left: paintRect.left - rootRect.left,
-        width: paintRect.width,
-        height: paintRect.height,
+        top: (paintRect.top - rootRect.top) / scaleY,
+        left: (paintRect.left - rootRect.left) / scaleX,
+        width: paintRect.width / scaleX,
+        height: paintRect.height / scaleY,
         radius: getComputedStyle(paint).borderTopLeftRadius,
       });
     };
@@ -113,6 +168,7 @@ const Overlay = forwardRef<
       data-slot-id={typeof data.slotId === "string" ? data.slotId : undefined}
       data-element-id={typeof data.elementId === "string" ? data.elementId : undefined}
       style={{
+        ...layoutStyle,
         // Keep source in place — DragOverlay shows the preview (avoids laggy full-tree transforms)
         transform: isDragging ? undefined : CSS.Transform.toString(transform),
         transition: isDragging ? undefined : transition,
@@ -133,7 +189,7 @@ const Overlay = forwardRef<
       <div
         data-editor-chrome
         className={cn(
-          "pointer-events-none absolute z-10",
+          "pointer-events-none absolute z-10 in-data-dragging:opacity-0",
           selected
             ? "shadow-[0_0_0_1px_#0d99ff]"
             : inactive
@@ -153,7 +209,7 @@ const Overlay = forwardRef<
       <div
         data-editor-chrome
         className={cn(
-          "absolute z-20 flex h-4 items-center gap-0.5",
+          "absolute z-20 flex h-4 items-center gap-0.5 in-data-dragging:opacity-0",
           selected
             ? "opacity-100"
             : chrome && directHover
@@ -164,10 +220,15 @@ const Overlay = forwardRef<
         )}
         style={{ top: box.top - 18, left: box.left }}
       >
-        <span className="rounded-sm bg-[#0d99ff] px-1 text-[9px] font-medium leading-4 text-white">{label}</span>
-        {chrome && !locked ? (
-          <div className="ml-0.5 flex items-center rounded-sm bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
-            <button
+        <span className="rounded-sm cursor-default bg-[#0d99ff] px-1 text-[9px] font-medium leading-4 text-white">{label}</span>
+        {chrome && !locked && (!dragDisabled || onDuplicate || onRemove) ? (
+          <div
+            className={cn(
+              "ml-0.5 flex items-center rounded-sm shadow-[0_0_0_1px_rgba(0,0,0,0.08)]",
+              dark ? "bg-zinc-900 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]" : "bg-white",
+            )}
+          >
+            {!dragDisabled ? <button
               type="button"
               className="grid size-4 touch-none cursor-grab place-items-center text-zinc-400 active:cursor-grabbing"
               title={`Drag ${label}`}
@@ -176,11 +237,14 @@ const Overlay = forwardRef<
               {...listeners}
             >
               <GripVertical className="size-3" />
-            </button>
+            </button> : null}
             {onDuplicate ? (
               <button
                 type="button"
-                className="grid size-4 place-items-center text-zinc-400 hover:text-zinc-800"
+                className={cn(
+                  "grid size-4 place-items-center text-zinc-400",
+                  dark ? "hover:text-zinc-100" : "hover:text-zinc-800",
+                )}
                 title="Duplicate"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -215,7 +279,8 @@ const Overlay = forwardRef<
 
 Overlay.displayName = "Overlay";
 
-function CanvasSizeBadge() {
+function CanvasSizeBadge({ zoom }: { zoom: number }) {
+  const dark = useEditorTheme();
   const { selectedElement, selectedSection, selection } = useEditor();
   const nodeId =
     selectedElement?.id ??
@@ -228,25 +293,84 @@ function CanvasSizeBadge() {
       const el = document.querySelector(`[data-editor-node="${window.CSS.escape(nodeId)}"]`) as HTMLElement | null;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setBox({ width: Math.round(rect.width), height: Math.round(rect.height) });
+      setBox({ width: Math.round(rect.width / zoom), height: Math.round(rect.height / zoom) });
     };
     read();
     const frame = requestAnimationFrame(read);
     return () => cancelAnimationFrame(frame);
-  }, [nodeId, selectedElement, selectedSection]);
+  }, [nodeId, selectedElement, selectedSection, zoom]);
 
   if (!nodeId || !box.width) return null;
   return (
     <div
       data-editor-size
-      className="pointer-events-none absolute bottom-3 right-3 z-30 font-mono text-[10px] text-zinc-500"
+      className={cn(
+        "pointer-events-none absolute bottom-3 right-3 z-30 font-mono text-[10px]",
+        dark ? "text-zinc-400" : "text-zinc-500",
+      )}
     >
       {box.width} × {box.height}
     </div>
   );
 }
 
+function CanvasZoomControls({
+  zoom,
+  fit,
+  onZoom,
+  onFit,
+}: {
+  zoom: number;
+  fit: boolean;
+  onZoom: (zoom: number) => void;
+  onFit: () => void;
+}) {
+  const dark = useEditorTheme();
+  const surface = dark
+    ? "border-zinc-700 bg-zinc-900 text-zinc-300"
+    : "border-zinc-200 bg-white text-zinc-600";
+  const button = dark
+    ? "hover:bg-zinc-800 hover:text-zinc-50"
+    : "hover:bg-zinc-100 hover:text-zinc-900";
+
+  return (
+    <div
+      className={cn("absolute bottom-3 left-3 z-40 flex h-7 items-center overflow-hidden rounded-md border shadow-sm", surface)}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        title="Zoom out"
+        aria-label="Zoom out"
+        className={cn("grid size-7 place-items-center", button)}
+        onClick={() => onZoom(Math.max(0.25, zoom - 0.1))}
+      >
+        <Minus className="size-3" />
+      </button>
+      <button
+        type="button"
+        title="Fit canvas"
+        className={cn("flex h-7 min-w-14 items-center justify-center gap-1 border-x px-1.5 text-[10px]", dark ? "border-zinc-700" : "border-zinc-200", button, fit && "text-[#0d99ff]")}
+        onClick={onFit}
+      >
+        <Maximize2 className="size-3" />
+        {Math.round(zoom * 100)}%
+      </button>
+      <button
+        type="button"
+        title="Zoom in"
+        aria-label="Zoom in"
+        className={cn("grid size-7 place-items-center", button)}
+        onClick={() => onZoom(Math.min(2, zoom + 0.1))}
+      >
+        <Plus className="size-3" />
+      </button>
+    </div>
+  );
+}
+
 function AlignToolbar() {
+  const dark = useEditorTheme();
   const { canAlign, alignSelection } = useEditor();
   if (!canAlign) return null;
   const actions: { kind: AlignKind; icon: typeof AlignLeft; title: string }[] = [
@@ -260,15 +384,25 @@ function AlignToolbar() {
     { kind: "distribute-vertical", icon: MoveVertical, title: "Distribute vertically" },
   ];
   return (
-    <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-md border border-zinc-200 bg-white p-0.5 shadow-sm">
+    <div
+      className={cn(
+        "absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-md border p-0.5 shadow-sm",
+        dark ? "border-zinc-700 bg-zinc-900" : "border-zinc-200 bg-white",
+      )}
+    >
       {actions.map((action, index) => (
         <span key={action.kind} className="flex items-center">
-          {index === 3 || index === 6 ? <span className="mx-1 h-4 w-px bg-zinc-200" /> : null}
+          {index === 3 || index === 6 ? (
+            <span className={cn("mx-1 h-4 w-px", dark ? "bg-zinc-700" : "bg-zinc-200")} />
+          ) : null}
           <button
             type="button"
             title={action.title}
             className={cn(
-              "grid size-7 place-items-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900",
+              "grid size-7 place-items-center rounded",
+              dark
+                ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900",
               (action.kind === "top" || action.kind === "bottom") && "rotate-90",
             )}
             onClick={(event) => {
@@ -284,11 +418,13 @@ function AlignToolbar() {
   );
 }
 
-export function EditorCanvas() {
+export function EditorCanvas({ livePreview = false }: { livePreview?: boolean }) {
+  const dark = useEditorTheme();
   const {
     page,
     selection,
     setSelection,
+    requestLayerReveal,
     toggleSelectElement,
     selectedRefs,
     duplicateSection,
@@ -298,10 +434,68 @@ export function EditorCanvas() {
     breakpoint,
     previewState,
     selectedElement,
+    selectedSection,
+    addElement,
     editorMode,
   } = useEditor();
   const width = breakpoint === "mobile" ? 390 : breakpoint === "tablet" ? 768 : 1200;
-  const css = nodeStylesheet(collectStyledNodes(page));
+  useEditViewportStyles(width, !livePreview);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ viewportWidth: 0, stageHeight: 0 });
+  const [zoomState, setZoomState] = useState<{ breakpoint: typeof breakpoint; value: number | null }>({
+    breakpoint,
+    value: null,
+  });
+  const fitZoom = canvasSize.viewportWidth
+    ? Math.min(1, Math.max(0.25, (canvasSize.viewportWidth - 48) / width))
+    : 1;
+  const manualZoom = zoomState.breakpoint === breakpoint ? zoomState.value : null;
+  const zoom = manualZoom ?? fitZoom;
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const stage = stageRef.current;
+    if (!viewport || !stage) return;
+    const observer = new ResizeObserver(() => {
+      setCanvasSize({
+        viewportWidth: viewport.clientWidth,
+        stageHeight: stage.offsetHeight,
+      });
+    });
+    observer.observe(viewport);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [width, livePreview]);
+
+  const insertSvg = useCallback(
+    (source: string, sectionId?: string, slotId?: string) => {
+      const markup = sanitizeSvgMarkup(svgFromTransfer(source));
+      const targetSectionId = sectionId || selectedSection?.id || page.sections[0]?.id;
+      if (!markup || !targetSectionId) return false;
+      addElement(targetSectionId, "svg", slotId, undefined, {
+        markup,
+        label: "Pasted SVG",
+      });
+      return true;
+    },
+    [addElement, page.sections, selectedSection?.id],
+  );
+
+  useEffect(() => {
+    if (livePreview) return;
+    const onPaste = (event: ClipboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const source = event.clipboardData?.getData("image/svg+xml") ||
+        event.clipboardData?.getData("text/html") ||
+        event.clipboardData?.getData("text/plain") ||
+        "";
+      if (insertSvg(source)) event.preventDefault();
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [insertSvg, livePreview]);
+
   const isComponent = editorMode === "component";
   const selectedLabel =
     selection.kind === "element"
@@ -317,29 +511,87 @@ export function EditorCanvas() {
               : "Page";
 
   return (
-    <StylePreviewProvider value={{ breakpoint, previewState, live: false, previewNodeId: selectedElement?.id ?? null }}>
-      <div className="relative min-h-0 flex-1 bg-[#e5e5e5]">
+    <StylePreviewProvider
+      value={{
+        breakpoint,
+        previewState,
+        live: livePreview,
+        interactivePreview: livePreview,
+        previewNodeId: selectedElement?.id ?? null,
+      }}
+    >
+      <div className={cn("relative min-h-0 flex-1", dark ? "bg-zinc-900" : "bg-[#e5e5e5]")}>
       <div
+        ref={viewportRef}
         className="absolute inset-0 overflow-auto"
-        onClick={() => setSelection({ kind: "page" })}
+        onDragOver={(event) => {
+          if (livePreview) return;
+          const types = Array.from(event.dataTransfer.types);
+          if (
+            types.includes("Files") ||
+            types.some((type) => type === "image/svg+xml" || type === "text/plain" || type === "text/html")
+          ) {
+            event.preventDefault();
+          }
+        }}
+        onDrop={async (event) => {
+          if (livePreview) return;
+          const file = Array.from(event.dataTransfer.files).find(
+            (item) => item.type === "image/svg+xml" || item.name.toLowerCase().endsWith(".svg"),
+          );
+          const source = event.dataTransfer.getData("image/svg+xml") ||
+            event.dataTransfer.getData("text/html") ||
+            event.dataTransfer.getData("text/plain") ||
+            (file ? await file.text() : "");
+          const target = event.target instanceof Element ? event.target : null;
+          const overlay = target?.closest<HTMLElement>("[data-section-id]");
+          if (insertSvg(source, overlay?.dataset.sectionId, overlay?.dataset.slotId)) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onClick={() => {
+          if (livePreview) return;
+          const target = { kind: "page" } as const;
+          setSelection(target);
+          requestLayerReveal(target);
+        }}
       >
-        <AlignToolbar />
+        {!livePreview ? <AlignToolbar /> : null}
         <AnimationStyles />
-        <div className="mx-auto flex items-center justify-between px-6 pb-2 pt-4 text-[11px] text-zinc-500">
-          <span>{selectedLabel}</span>
+        <div
+          className={cn(
+            "mx-auto flex items-center justify-between px-6 pb-2 pt-4 text-[11px]",
+            dark ? "text-zinc-400" : "text-zinc-500",
+          )}
+        >
+          <span>{livePreview ? "Live preview · interactions enabled" : selectedLabel}</span>
           <span className="font-mono">
             {breakpoint} · {width}
           </span>
         </div>
         <div className="px-6 pb-10">
           <div
-            className="mx-auto overflow-visible bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_80px_rgba(15,23,42,0.08)]"
-            style={{ maxWidth: width }}
+            className="relative mx-auto"
+            style={{
+              width: width * zoom,
+              height: Math.max(200, canvasSize.stageHeight * zoom),
+            }}
           >
+            <div
+              ref={stageRef}
+              className="absolute left-0 top-0 overflow-visible bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_80px_rgba(15,23,42,0.08)]"
+              data-editor-scale={zoom}
+              style={{ width, transform: `scale(${zoom})`, transformOrigin: "top left" }}
+            >
+            {livePreview ? (
+              <PreviewFrame page={page} width={width} breakpoint={breakpoint} />
+            ) : (
             <CanvasEditorContextMenu pageId={page.id}>
-            <SortableContext items={page.sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
-              <div style={themeStyle(page.theme)}>
-              {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+            <SortableContext items={page.sections.map((section) => section.id)} strategy={canvasSortingStrategy}>
+              <div data-page-export-root data-editor-canvas style={themeStyle(page.theme)}>
+                {/* Selected-breakpoint inline styles must not be overridden by
+                    runtime media rules evaluated against the editor window. */}
                 {!isComponent ? <SectionGapDrop index={0} /> : null}
                 {page.sections.map((section, index) => {
                   const sectionSelected = selection.kind === "section" && selection.sectionId === section.id;
@@ -363,11 +615,15 @@ export function EditorCanvas() {
                       selected={sectionSelected}
                       inactive={selectedRefs.some((ref) => ref.sectionId === section.id)}
                       data={{ sectionId: section.id }}
-                      onSelect={() => setSelection({ kind: "section", sectionId: section.id })}
+                      onSelect={() => {
+                        const target = { kind: "section", sectionId: section.id } as const;
+                        setSelection(target);
+                        requestLayerReveal(target);
+                      }}
                       onDuplicate={isComponent ? undefined : () => duplicateSection(section.id)}
                       onRemove={isComponent ? undefined : () => removeSection(section.id)}
                     >
-                      <SortableContext items={elementIds} strategy={verticalListSortingStrategy}>
+                      <SortableContext items={elementIds} strategy={canvasSortingStrategy}>
                         <LandingSection
                           section={section}
                           theme={page.theme}
@@ -379,21 +635,33 @@ export function EditorCanvas() {
                               ancestors: PageElement[] = [],
                             ): ReactNode => {
                               const editable = !instanceLocked || isInstanceSlotEditable(section, node, ancestors);
-                              const fill = wantsFullWidth(node) || isContainerElement(node.type);
+                              const structureIssue = getElementStructureIssue(section, node.id, { allowComponentRoot: isComponent });
+                              const resolvedNode = resolveNodeStyles(
+                                node, breakpoint, selectedElement?.id === node.id ? previewState : "default",
+                              );
+                              const { displayNode, layoutStyle } = editorPositionedNode(node, resolvedNode);
+                              const fill =
+                                wantsFullWidth({ ...node, styles: resolvedNode }) || isContainerElement(node.type);
                               return (
                               <Overlay
                                 id={node.id}
                                 kind="element"
                                 label={
-                                  node.textSlot
+                                  node.type === "frame" && (node.props.branch === "then" || node.props.branch === "else")
+                                    ? `IF · ${String(node.props.branch).toUpperCase()}`
+                                    : node.textSlot
                                     ? `${node.type} · slot`
                                     : node.type === "slot"
                                       ? `slot · ${String(node.props.name || "Slot")}`
-                                      : node.type
+                                      : typeof node.props.label === "string" && node.props.label.trim()
+                                        ? node.props.label.trim()
+                                        : node.type
                                 }
                                 selected={selectedRefs.some((ref) => ref.elementId === node.id)}
                                 fillWidth={fill}
                                 locked={!editable}
+                                dragDisabled={Boolean(structureIssue)}
+                                layoutStyle={layoutStyle}
                                 data={{
                                   sectionId: section.id,
                                   slotId: nodeSlotId,
@@ -402,28 +670,39 @@ export function EditorCanvas() {
                                 }}
                                 onSelect={(event) => {
                                   if (!editable && !node.textSlot) {
-                                    setSelection({ kind: "section", sectionId: section.id });
+                                    const target = { kind: "section", sectionId: section.id } as const;
+                                    setSelection(target);
+                                    requestLayerReveal(target);
                                     return;
                                   }
-                                  toggleSelectElement(
-                                    { sectionId: section.id, slotId: nodeSlotId, elementId: node.id },
-                                    event.shiftKey || event.metaKey,
-                                  );
+                                  const target = {
+                                    kind: "element",
+                                    sectionId: section.id,
+                                    slotId: nodeSlotId,
+                                    elementId: node.id,
+                                  } as const;
+                                  toggleSelectElement(target, event.shiftKey || event.metaKey);
+                                  requestLayerReveal(target);
                                 }}
-                                onDuplicate={editable ? () => duplicateElement(section.id, node.id) : undefined}
-                                onRemove={editable ? () => removeElement(section.id, node.id) : undefined}
+                                onDuplicate={editable && !structureIssue ? () => duplicateElement(section.id, node.id) : undefined}
+                                onRemove={editable && !structureIssue ? () => removeElement(section.id, node.id) : undefined}
                               >
                                 <AnimateHost
-                                  node={node}
+                                  node={displayNode}
                                   className={fill ? "block min-w-0 w-full" : "inline-flex max-w-full"}
                                 >
+                                  {node.type === "frame" && (node.props.branch === "then" || node.props.branch === "else") ? (
+                                    <div data-editor-chrome data-page-export-remove className="pointer-events-none text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                                      IF · {String(node.props.branch)}
+                                    </div>
+                                  ) : null}
                                   <LandingElement
-                                    element={node}
+                                    element={displayNode}
                                     interactive={false}
                                     wrapChildren={(children, parent) => (
                                       <SortableContext
                                         items={(parent.children ?? []).map((child) => child.id)}
-                                        strategy={verticalListSortingStrategy}
+                                        strategy={canvasSortingStrategy}
                                       >
                                         {children}
                                       </SortableContext>
@@ -486,10 +765,18 @@ export function EditorCanvas() {
               </div>
             </SortableContext>
             </CanvasEditorContextMenu>
+            )}
+            </div>
           </div>
         </div>
       </div>
-      <CanvasSizeBadge />
+      <CanvasZoomControls
+        zoom={zoom}
+        fit={manualZoom === null}
+        onFit={() => setZoomState({ breakpoint, value: null })}
+        onZoom={(value) => setZoomState({ breakpoint, value })}
+      />
+      {!livePreview ? <CanvasSizeBadge zoom={zoom} /> : null}
       </div>
     </StylePreviewProvider>
   );

@@ -44,7 +44,7 @@ export function AnimationEditor({
           <div className="flex items-center gap-0.5">
             <button
               type="button"
-              className="grid size-5 place-items-center rounded-[3px] text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+              className="grid size-5 place-items-center rounded-[3px] text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               title="Preview"
               onClick={() => node.id && playNodeAnimation(node.id)}
             >
@@ -52,7 +52,7 @@ export function AnimationEditor({
             </button>
             <button
               type="button"
-              className="grid size-5 place-items-center rounded-[3px] text-zinc-400 hover:bg-zinc-100 hover:text-zinc-800"
+              className="grid size-5 place-items-center rounded-[3px] text-zinc-400 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               title="Remove"
               onClick={() => {
                 onChange(null);
@@ -67,7 +67,7 @@ export function AnimationEditor({
 
       <section className="space-y-1.5">
         <p className="text-[10px] uppercase tracking-wide text-zinc-400">Trigger</p>
-        <div className="grid grid-cols-2 gap-0.5 rounded-md bg-zinc-100 p-0.5">
+        <div className="grid grid-cols-2 gap-0.5 rounded-md bg-zinc-100 p-0.5 dark:bg-zinc-800">
           {ANIMATION_TRIGGERS.map((item) => (
             <button
               key={item.id}
@@ -77,8 +77,8 @@ export function AnimationEditor({
               className={cn(
                 "h-6 rounded-[4px] text-[10px] font-medium",
                 (anim?.trigger ?? "in-view-replay") === item.id && anim
-                  ? "bg-white text-zinc-900 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-700",
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-100",
               )}
             >
               {item.label}
@@ -94,11 +94,11 @@ export function AnimationEditor({
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="flex w-full items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-left hover:border-zinc-300"
+          className="flex w-full items-center gap-2 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-left hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600"
         >
           <PreviewGlyph preset={anim.preset} active />
           <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-medium text-zinc-800">
+            <span className="block text-[11px] font-medium text-zinc-800 dark:text-zinc-100">
               {ANIMATION_PRESETS.find((item) => item.id === anim.preset)?.label}
             </span>
             <span className="block text-[10px] text-zinc-400">
@@ -115,7 +115,7 @@ export function AnimationEditor({
       )}
 
       {anim ? (
-        <div className="space-y-3 border-t border-zinc-100 pt-3">
+        <div className="space-y-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <PreviewStage preset={anim.preset} anim={anim} />
           <Timeline anim={anim} />
           <div className="space-y-1.5">
@@ -168,7 +168,7 @@ export function AnimationEditor({
               <select
                 value={anim.easing}
                 onChange={(event) => patch({ easing: event.target.value as AnimationConfig["easing"] })}
-                className="h-5 rounded-[3px] border-0 bg-zinc-100 px-1.5 text-[11px] text-zinc-700 outline-none"
+                className="h-5 rounded-[3px] border-0 bg-zinc-100 px-1.5 text-[11px] text-zinc-700 outline-none dark:bg-zinc-800 dark:text-zinc-200 dark:[color-scheme:dark]"
               >
                 {ANIMATION_EASINGS.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -200,7 +200,7 @@ function EffectLibrary({
       {groups.map((group) => (
         <div key={group}>
           <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-400">{group}</p>
-          <div className="overflow-hidden rounded-md border border-zinc-200">
+          <div className="overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
             {ANIMATION_PRESETS.filter((item) => item.group === group).map((item, index) => {
               const selected = active === item.id;
               return (
@@ -210,8 +210,10 @@ function EffectLibrary({
                   onClick={() => onPick(item.id)}
                   className={cn(
                     "group flex h-8 w-full items-center gap-2 px-1.5 text-left",
-                    index > 0 && "border-t border-zinc-100",
-                    selected ? "bg-zinc-900 text-white" : "bg-white text-zinc-700 hover:bg-zinc-50",
+                    index > 0 && "border-t border-zinc-100 dark:border-zinc-800",
+                    selected
+                      ? "bg-zinc-900 text-white dark:bg-zinc-700 dark:text-zinc-50"
+                      : "bg-white text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800",
                   )}
                 >
                   <PreviewGlyph preset={item.id} active={selected} hoverOnly />
@@ -233,7 +235,7 @@ function Timeline({ anim }: { anim: AnimationConfig }) {
   return (
     <div className="space-y-1">
       <p className="text-[10px] uppercase tracking-wide text-zinc-400">Timeline</p>
-      <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-1.5">
+      <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-1.5 dark:border-zinc-700 dark:bg-zinc-900/80">
         <div className="mb-1 flex justify-between font-mono text-[9px] text-zinc-400">
           {ticks.map((tick) => (
             <span key={tick}>{tick === 0 ? "0s" : `${tick}`}</span>
@@ -243,7 +245,7 @@ function Timeline({ anim }: { anim: AnimationConfig }) {
           {tracks.map((track) => (
             <div key={track.id} className="flex items-center gap-1.5">
               <span className="w-10 shrink-0 text-[9px] uppercase tracking-wide text-zinc-400">{track.label}</span>
-              <div className="relative h-3 flex-1 overflow-hidden rounded-[3px] bg-white ring-1 ring-zinc-200">
+              <div className="relative h-3 flex-1 overflow-hidden rounded-[3px] bg-white ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700">
                 <div
                   className="absolute inset-y-0.5 rounded-[2px]"
                   style={{
@@ -272,9 +274,9 @@ function FromValues({ preset, distance }: { preset: AnimationPreset; distance: n
   return (
     <div className="grid grid-cols-2 gap-1">
       {items.map((item) => (
-        <div key={item.label} className="flex h-6 items-center justify-between rounded-[3px] bg-zinc-100 px-1.5">
+        <div key={item.label} className="flex h-6 items-center justify-between rounded-[3px] bg-zinc-100 px-1.5 dark:bg-zinc-800">
           <span className="text-[10px] text-zinc-400">{item.label}</span>
-          <span className="font-mono text-[10px] text-zinc-700">{item.value}</span>
+          <span className="font-mono text-[10px] text-zinc-700 dark:text-zinc-200">{item.value}</span>
         </div>
       ))}
     </div>
@@ -283,10 +285,10 @@ function FromValues({ preset, distance }: { preset: AnimationPreset; distance: n
 
 function PreviewStage({ preset, anim }: { preset: AnimationPreset; anim: AnimationConfig }) {
   return (
-    <div className="overflow-hidden rounded-md border border-zinc-200 bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%,transparent_75%,#f4f4f5_75%),linear-gradient(45deg,#f4f4f5_25%,white_25%,white_75%,#f4f4f5_75%)] bg-[length:10px_10px] bg-[position:0_0,5px_5px]">
+    <div className="editor-checkerboard overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
       <div className="flex h-16 items-center justify-center">
         {isTextAnimation(preset) ? (
-          <span className="text-[11px] font-medium text-zinc-700">
+          <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">
             {["In", "view"].map((word, index) => (
               <motion.span
                 key={word}
@@ -307,7 +309,7 @@ function PreviewStage({ preset, anim }: { preset: AnimationPreset; anim: Animati
           </span>
         ) : (
           <motion.span
-            className="block h-7 w-16 rounded-[4px] bg-zinc-800"
+            className="block h-7 w-16 rounded-[4px] bg-zinc-800 dark:bg-zinc-200"
             variants={motionVariants(preset, anim.distance)}
             initial="hidden"
             animate="visible"
@@ -335,14 +337,14 @@ function PreviewGlyph({
     <span
       className={cn(
         "grid size-6 shrink-0 place-items-center overflow-hidden rounded-[3px]",
-        active ? "bg-white/15" : "bg-zinc-100",
+        active ? "bg-white/15" : "bg-zinc-100 dark:bg-zinc-800",
       )}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <motion.span
         key={play ? "play" : "rest"}
-        className={cn("block h-2.5 w-3.5 rounded-[2px]", active ? "bg-white" : "bg-zinc-700")}
+        className={cn("block h-2.5 w-3.5 rounded-[2px]", active ? "bg-white" : "bg-zinc-700 dark:bg-zinc-300")}
         variants={motionVariants(preset, 6)}
         initial={play ? "hidden" : "visible"}
         animate="visible"

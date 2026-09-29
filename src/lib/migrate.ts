@@ -1,6 +1,14 @@
 import { nanoid } from "nanoid";
-import { defaultElementsSlot, slotDefs } from "@/lib/slots";
-import type { ElementType, LandingPage, PageElement, PageSection, SlotValue } from "@/lib/types";
+import { defaultElementsSlot, isContainerElement, slotDefs } from "@/lib/slots";
+import type {
+  ElementType,
+  InteractionBinding,
+  LandingPage,
+  PageElement,
+  PageSection,
+  SlotValue,
+  VariableDefinition,
+} from "@/lib/types";
 
 function makeElement(type: ElementType, props: Record<string, unknown> = {}): PageElement {
   return {
@@ -10,7 +18,58 @@ function makeElement(type: ElementType, props: Record<string, unknown> = {}): Pa
     className: "",
     htmlId: "",
     styles: {},
-    children: type === "frame" ? [] : undefined,
+    children: isContainerElement(type) ? [] : undefined,
+  };
+}
+
+function cloneVariables(variables?: VariableDefinition[]) {
+  return variables?.map((variable) => structuredClone(variable));
+}
+
+function cloneInteractions(interactions?: InteractionBinding[]) {
+  return interactions?.map((binding) => ({
+    ...binding,
+    action: structuredClone(binding.action),
+  }));
+}
+
+/** Normalize IF/ELSE without new slot types or random IDs; safe to run repeatedly. */
+export function normalizeConditionalElement(element: PageElement): PageElement {
+  if (element.type !== "conditional") return element;
+  const children = element.children ?? [];
+  const thenFrame = children.find((child) => child.type === "frame" && child.props.branch === "then");
+  const elseFrame = children.find((child) => child.type === "frame" && child.props.branch === "else");
+  const legacy = children.filter((child) => child !== thenFrame && child !== elseFrame);
+  const props = { ...element.props };
+  const fallback = typeof props.fallback === "string" ? props.fallback : "";
+  delete props.fallback;
+  const branch = (kind: "then" | "else", existing: PageElement | undefined, extra: PageElement[]): PageElement => ({
+    ...(existing ?? { id: `${element.id}:branch:${kind}`, type: "frame" as const, styles: { display: "flex", flexDirection: "column", width: "100%" } }),
+    props: { ...existing?.props, branch: kind, label: kind === "then" ? "Then" : "Else" },
+    children: [...(existing?.children ?? []), ...extra],
+  });
+  return {
+    ...element, props,
+    children: [
+      branch("then", thenFrame, legacy),
+      branch("else", elseFrame, fallback ? [{ id: `${element.id}:branch:else:text`, type: "paragraph", props: { text: fallback } }] : []),
+    ],
+  };
+}
+
+export function migrateElement(element: PageElement): PageElement {
+  element = normalizeConditionalElement(element);
+  const children = element.children?.map(migrateElement);
+  return {
+    ...element,
+    props: { ...element.props },
+    bindings: element.bindings ? structuredClone(element.bindings) : undefined,
+    className: element.className ?? "",
+    htmlId: element.htmlId ?? "",
+    styles: element.styles ?? {},
+    variables: cloneVariables(element.variables),
+    interactions: cloneInteractions(element.interactions),
+    children: children ?? (isContainerElement(element.type) ? [] : undefined),
   };
 }
 
@@ -157,23 +216,39 @@ export function migrateSection(section: PageSection): PageSection {
   }
 
   for (const key of Object.keys(slots)) {
-    if (key.startsWith("frame:")) delete slots[key];
+    if (key.startsWith("frame:")) {
+      delete slots[key];
+      continue;
+    }
+    const value = slots[key];
+    if (Array.isArray(value)) {
+      slots[key] = value.map(migrateElement);
+      continue;
+    }
+    const element = asElement(value);
+    if (element) slots[key] = migrateElement(element);
   }
 
   return {
     ...section,
     props,
     slots,
+    slotOverrides: section.slotOverrides ? Object.fromEntries(Object.entries(section.slotOverrides).map(([key, value]) => [
+      key, Array.isArray(value) ? value.map(migrateElement) : asElement(value) ? migrateElement(value as PageElement) : value,
+    ])) : undefined,
     elements: undefined,
     className: section.className ?? "",
     htmlId: section.htmlId ?? "",
     styles: section.styles ?? {},
+    variables: cloneVariables(section.variables),
+    interactions: cloneInteractions(section.interactions),
   };
 }
 
 export function migratePage(page: LandingPage): LandingPage {
   return {
     ...page,
+    variables: cloneVariables(page.variables),
     sections: page.sections.map(migrateSection),
   };
 }

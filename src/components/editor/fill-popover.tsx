@@ -59,14 +59,14 @@ export function FillPopover({
   return (
     <div className="grid gap-1">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] text-zinc-500">Fill</p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Fill</p>
         {inherited ? <span className="text-[10px] uppercase tracking-wide text-zinc-400">Computed</span> : null}
       </div>
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70"
+            className="flex h-6 items-center gap-1.5 rounded-sm bg-zinc-100 px-1.5 text-left hover:bg-zinc-200/70 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           >
             <ColorSwatch
               color={detected === "solid" ? hex : ""}
@@ -79,24 +79,24 @@ export function FillPopover({
                     : undefined
               }
             />
-            <span className="flex-1 truncate font-mono text-[11px] text-zinc-700">
+            <span className="flex-1 truncate font-mono text-[11px] text-zinc-700 dark:text-zinc-200">
               {fillLabel(detected, hex)}
               {detected === "solid" && hex && alpha < 0.995 ? ` ${Math.round(alpha * 100)}%` : ""}
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-0 shadow-xl">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
-            <p className="text-[11px] font-medium text-zinc-700">Fill</p>
+        <PopoverContent className="editor-popover w-[248px] rounded-lg border-zinc-200 p-0 shadow-xl dark:border-zinc-700">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+            <p className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">Fill</p>
             <button
               type="button"
-              className="text-[11px] text-zinc-400 hover:text-zinc-700"
+              className="text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
               onClick={() => onChange({ background: "", backgroundImage: "" })}
             >
               None
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-0.5 border-b border-zinc-100 p-1.5">
+          <div className="grid grid-cols-3 gap-0.5 border-b border-zinc-100 p-1.5 dark:border-zinc-800">
             {modes.map((item) => (
               <button
                 key={item.id}
@@ -104,7 +104,9 @@ export function FillPopover({
                 onClick={() => setMode(item.id)}
                 className={cn(
                   "h-7 rounded text-[11px] font-medium",
-                  currentMode === item.id ? "bg-zinc-900 text-white" : "text-zinc-500 hover:bg-zinc-100",
+                  currentMode === item.id
+                    ? "bg-zinc-900 text-white dark:bg-zinc-700 dark:text-zinc-50"
+                    : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
                 )}
               >
                 {item.label}

@@ -19,7 +19,7 @@ export function FrameDropZone({
   const { selection, setSelection } = useEditor();
   const slotId = frameSlotId(parentId);
   const selected = selection.kind === "slot" && selection.sectionId === sectionId && selection.slotId === slotId;
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: `frame-drop-${sectionId}-${parentId}`,
     data: { kind: "frame", sectionId, slotId, parentId },
   });
@@ -29,12 +29,13 @@ export function FrameDropZone({
     return (
       <div
         ref={setNodeRef}
+        data-page-export-remove
+        data-drop-container={parentId}
         aria-hidden
         className={cn(
           "pointer-events-none absolute inset-0 z-[4] rounded-[inherit]",
           "[[data-dragging]_&]:pointer-events-auto",
-          isOver && "bg-[#0d99ff]/12 shadow-[inset_0_0_0_2px_#0d99ff]",
-          selected && !isOver && "shadow-[inset_0_0_0_1px_rgba(13,153,255,0.35)]",
+          selected && "shadow-[inset_0_0_0_1px_rgba(13,153,255,0.35)] [[data-dragging]_&]:shadow-none",
         )}
       />
     );
@@ -43,6 +44,9 @@ export function FrameDropZone({
   return (
     <button
       ref={setNodeRef}
+      data-page-export-remove
+      data-drop-container={parentId}
+      style={{ gridColumn: "1 / -1", minWidth: 0 }}
       type="button"
       onClick={(event) => {
         event.stopPropagation();
@@ -50,9 +54,10 @@ export function FrameDropZone({
       }}
       className={cn(
         "relative flex w-full min-h-12 items-center justify-center rounded-[2px] border border-dashed px-3 py-3 text-[11px] transition",
-        isOver || selected
+        selected
           ? "border-[#0d99ff] bg-[#0d99ff]/5 text-zinc-700"
           : "border-zinc-300/80 text-zinc-400 hover:border-[#0d99ff]/70",
+        "[[data-dragging]_&]:border-zinc-300/80 [[data-dragging]_&]:bg-transparent [[data-dragging]_&]:text-zinc-400",
       )}
     >
       {label || "Drop elements here"}

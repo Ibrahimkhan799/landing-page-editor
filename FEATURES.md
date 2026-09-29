@@ -3,10 +3,9 @@
 
 ### 1. Improve Editor Usability and Accessibility
 
-- Add cusom components for padding and margin styles.
 - Instead of using traditional CSS properties for spacing, layout and typography, use 
   custom Editor Logic just like figma.
-- Text Elements should have gradient fill.
+- Text Elements can also have gradient fill.
 - Frames Should be collapsible inside the layers tab.
 - Dark mode should be improved and contrast issues must be addressed and only effect editor not canvas and it should be minimal.
 - Selecting a layer should highlight it in the layers tab and scroll to it if it's not visible.

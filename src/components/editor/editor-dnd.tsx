@@ -1,32 +1,38 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
-  closestCorners,
-  defaultKeyboardCoordinateGetter,
+  MeasuringStrategy,
   pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
   type KeyboardCoordinateGetter,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
-import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import {
+  centerOf, gapHint, keyboardDropPoints, layoutFromStyle, measuredLayout,
+  nearestInsertion, nextKeyboardPoint, resolveLayoutDrop, verticalLayout,
+  type DropPoint, type DropRect, type LayoutHint,
+} from "@/components/editor/layout-drop";
 import { toast } from "sonner";
 import { useEditor } from "@/components/editor/editor-context";
+import { useEditorTheme } from "@/components/editor/editor-theme";
 import {
   elementsSlot,
   findElement,
   frameSlotId,
   getElementPlacementIssue,
+  getElementStructureIssue,
   isContainerElement,
   parseFrameSlotId,
   slotDefs,
@@ -34,13 +40,13 @@ import {
 import type {
   ElementPlacementIssue,
 } from "@/lib/slots";
-import type { ElementType, PageElement, SavedComponent, SectionType } from "@/lib/types";
+import type { ElementType, PageElement, PageSection, SavedComponent, SectionType } from "@/lib/types";
 
 type OverlayState = {
   label: string;
-  width?: number;
-  height?: number;
 };
+
+type DropHintState = LayoutHint;
 
 type DndData = {
   kind?: string;
@@ -53,6 +59,7 @@ type DndData = {
   elementType?: ElementType;
   parentId?: string;
   component?: SavedComponent;
+  props?: Record<string, unknown>;
 };
 
 type ElementTarget = {
@@ -61,8 +68,45 @@ type ElementTarget = {
   atIndex?: number;
 };
 
-const editorKeyboardCoordinates: KeyboardCoordinateGetter = (event, args) =>
-  sortableKeyboardCoordinates(event, args) ?? defaultKeyboardCoordinateGetter(event, args);
+type DropLocation = { node: HTMLElement | null; rect: DropRect; point: DropPoint };
+
+type ElementDragSource =
+  | { element: PageElement; issue: null }
+  | { element: null; issue: ElementPlacementIssue };
+
+function elementDragSource(sections: PageSection[], data: DndData, allowComponentRoot: boolean): ElementDragSource {
+  if (data.kind === "library-element") {
+    return data.type
+      ? { element: { id: "drag-preview", type: data.type as ElementType, props: data.props ?? {} }, issue: null }
+      : { element: null, issue: "invalid-type" };
+  }
+  const section = sections.find((item) => item.id === data.sectionId);
+  const found = section && data.elementId ? findElement(section, data.elementId) : null;
+  if (!section || !found || found.slotId !== data.slotId) return { element: null, issue: "missing-target" };
+  const issue = getElementStructureIssue(section, found.element.id, { allowComponentRoot });
+  return issue ? { element: null, issue } : { element: found.element, issue: null };
+}
+
+function dropGeometry(node: HTMLElement | null, data: DndData, fallback: DropRect) {
+  const canvas = Boolean(node?.closest("[data-editor-canvas]"));
+  const box = canvas && data.kind === "frame"
+    ? node?.closest<HTMLElement>('[data-editor-overlay="element"]') ?? node
+    : node;
+  const rect = box?.getBoundingClientRect() ?? fallback;
+  const layout = canvas && data.kind !== "section" && data.kind !== "section-gap" ? measuredLayout(box) : verticalLayout;
+  const cssSize = layout.axis === "x" ? box?.offsetWidth : box?.offsetHeight;
+  return {
+    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    layout,
+    scale: cssSize ? (layout.axis === "x" ? rect.width : rect.height) / cssSize : 1,
+    box,
+  };
+}
+
+function containerTarget(data: DndData) {
+  return data.kind === "frame" || data.kind === "slot" || data.kind === "layer-slot" ||
+    ((data.kind === "element" || data.kind === "layer-element") && isContainerElement(data.elementType));
+}
 
 function isSectionDrag(kind: string | undefined) {
   return kind === "section" || kind === "layer-section" || kind === "library-section" || kind === "library-component";
@@ -89,40 +133,40 @@ function isElementTarget(kind: string | undefined) {
   );
 }
 
-function dropRank(activeKind: string | undefined, targetKind: string | undefined) {
+function dropRank(activeKind: string | undefined, target: DndData | undefined) {
   if (isSectionDrag(activeKind)) {
-    if (targetKind === "section-gap") return 0;
-    if (targetKind === "layer-section") return 1;
-    if (targetKind === "section") return 2;
+    if (target?.kind === "section-gap") return 0;
+    if (target?.kind === "layer-section") return 1;
+    if (target?.kind === "section") return 2;
     return 10;
   }
 
-  if (targetKind === "element-insert") return 0;
-  if (targetKind === "element" || targetKind === "layer-element") return 1;
-  if (targetKind === "frame") return 2;
-  if (targetKind === "slot" || targetKind === "layer-slot") return 3;
-  if (targetKind === "section" || targetKind === "layer-section") return 4;
-  if (activeKind === "library-element" && targetKind === "section-gap") return 5;
+  if (target?.kind === "element-insert") return 0;
+  if (target?.kind === "element" || target?.kind === "layer-element") {
+    return isContainerElement(target.elementType) ? 3 : 1;
+  }
+  if (target?.kind === "frame" || target?.kind === "slot" || target?.kind === "layer-slot") return 2;
+  if (target?.kind === "section" || target?.kind === "layer-section") return 4;
+  if (activeKind === "library-element" && target?.kind === "section-gap") return 5;
   return 10;
 }
 
+const placementIssueMessages: Record<ElementPlacementIssue, string> = {
+  cycle: "A container cannot be moved into itself or one of its descendants",
+  "invalid-type": "That element type is not accepted by this slot",
+  locked: "That part of the component instance is locked",
+  occupied: "This single-element slot is already occupied",
+  "missing-target": "That drag source or drop target is no longer available",
+  "branch-scaffold": "Then/Else frames are fixed IF branches. Move or insert elements inside a branch instead",
+};
+
 function placementIssueMessage(issue: ElementPlacementIssue) {
-  switch (issue) {
-    case "cycle":
-      return "A container cannot be moved into itself or one of its descendants";
-    case "invalid-type":
-      return "That element type is not accepted by this slot";
-    case "locked":
-      return "That part of the component instance is locked";
-    case "occupied":
-      return "This single-element slot is already occupied";
-    case "missing-target":
-      return "That drop target is no longer available";
-  }
+  return placementIssueMessages[issue];
 }
 
 
 export function EditorDnd({ children }: { children: ReactNode }) {
+  const dark = useEditorTheme();
   const {
     page,
     addSection,
@@ -135,10 +179,71 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     editorMode,
   } = useEditor();
   const [overlay, setOverlay] = useState<OverlayState | null>(null);
-  const pointerYRef = useRef<number | null>(null);
+  const [dropHint, setDropHint] = useState<DropHintState | null>(null);
+  const pointerRef = useRef<DropPoint | null>(null);
+  const keyboardRef = useRef<{ id: UniqueIdentifier; point: DropPoint; offset: DropPoint } | null>(null);
+  const nodesRef = useRef(new Map<UniqueIdentifier, HTMLElement>());
   const pointerListenersRef = useRef<
-    { pointer: (event: PointerEvent) => void; touch: (event: TouchEvent) => void } | null
+    { pointer: (event: MouseEvent) => void; touch: (event: TouchEvent) => void } | null
   >(null);
+  useEffect(() => () => {
+    delete document.documentElement.dataset.dragging;
+    if (pointerListenersRef.current) {
+      window.removeEventListener("pointermove", pointerListenersRef.current.pointer);
+      window.removeEventListener("mousemove", pointerListenersRef.current.pointer);
+      window.removeEventListener("touchmove", pointerListenersRef.current.touch);
+    }
+  }, []);
+
+  const validTarget = useCallback((active: DndData, target: DndData) => {
+    if (isSectionDrag(active.kind)) {
+      return isSectionTarget(target.kind) && (target.kind === "section-gap" || target.sectionId !== active.sectionId);
+    }
+    if (!isElementDrag(active.kind)) return false;
+    if (elementDragSource(page.sections, active, editorMode === "component").issue) return false;
+    if (target.kind === "section-gap") return active.kind === "library-element";
+    if (!isElementTarget(target.kind)) return false;
+    if (active.elementId && (target.elementId === active.elementId || target.parentId === active.elementId)) return false;
+    if (active.elementId && target.sectionId === active.sectionId) {
+      const section = page.sections.find((item) => item.id === active.sectionId);
+      const moving = section && findElement(section, active.elementId)?.element;
+      const contains = (node: PageElement): boolean =>
+        node.id === target.elementId || node.id === target.parentId || frameSlotId(node.id) === target.slotId ||
+        Boolean(node.children?.some(contains));
+      if (moving && contains(moving)) return false;
+    }
+    return true;
+  }, [editorMode, page.sections]);
+
+  const editorKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) return undefined;
+    event.preventDefault();
+    const activeData = context.active?.data.current as DndData | undefined;
+    const activeRect = context.collisionRect;
+    if (!activeData || !activeRect) return undefined;
+    const current = keyboardRef.current?.point ?? centerOf(activeRect);
+    const candidates = context.droppableContainers.getEnabled().flatMap((container) => {
+      const data = container.data.current as DndData | undefined;
+      const rect = context.droppableRects.get(container.id);
+      if (!data || !rect || container.id === context.active?.id || !validTarget(activeData, data)) return [];
+      const geometry = dropGeometry(container.node.current, data, rect);
+      if (geometry.rect.width <= 0 || geometry.rect.height <= 0) return [];
+      const gap = data.kind === "element-insert" || data.kind === "section-gap";
+      const insideOnly = data.kind === "slot" || data.kind === "layer-slot" || (isElementDrag(activeData.kind) && isSectionTarget(data.kind));
+      const points = gap || insideOnly ? [centerOf(geometry.rect)] : keyboardDropPoints(geometry.rect, geometry.layout, containerTarget(data));
+      return points.filter((point) => validDropAt(activeData, data, { node: container.node.current, rect, point }))
+        .map((point) => ({ id: container.id, point, offset: {
+        x: (point.x - geometry.rect.left) / (geometry.rect.width || 1),
+        y: (point.y - geometry.rect.top) / (geometry.rect.height || 1),
+      } }));
+    });
+    const next = nextKeyboardPoint(candidates, current, event.code);
+    if (!next) return undefined;
+    keyboardRef.current = next;
+    const center = centerOf(activeRect);
+    return { x: currentCoordinates.x + next.point.x - center.x, y: currentCoordinates.y + next.point.y - center.y };
+  };
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
@@ -171,72 +276,118 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     [editorMode, page.sections],
   );
 
-  const collisionDetection = useCallback<CollisionDetection>(
-    (args) => {
+  const collisionDetection: CollisionDetection = (args) => {
       const activeData = args.active.data.current as DndData | undefined;
       const activeKind = activeData?.kind;
-      const activeElementId = activeData?.elementId ?? (activeKind === "element" ? String(args.active.id) : undefined);
-      const activeSectionId = activeData?.sectionId ?? (activeKind === "section" ? String(args.active.id) : undefined);
-
+      if (args.pointerCoordinates) pointerRef.current = args.pointerCoordinates;
+      nodesRef.current.clear();
       const droppableContainers = args.droppableContainers.filter((container) => {
-        if (container.id === args.active.id) return false;
+        if (container.node.current) nodesRef.current.set(container.id, container.node.current);
         const targetData = container.data.current as DndData | undefined;
-        if (!targetData?.kind) return false;
-
-        if (isSectionDrag(activeKind)) {
-          if (!isSectionTarget(targetData.kind)) return false;
-          if (targetData.kind !== "section-gap" && targetData.sectionId === activeSectionId) return false;
-          return true;
-        }
-
-        if (!isElementDrag(activeKind)) return false;
-        if (targetData.kind === "section-gap") return activeKind === "library-element";
-        if (!isElementTarget(targetData.kind)) return false;
-        if (targetData.elementId && targetData.elementId === activeElementId) return false;
-        return true;
+        return container.id !== args.active.id && Boolean(activeData && targetData && validTarget(activeData, targetData));
       });
+      if (!args.pointerCoordinates && keyboardRef.current) {
+        const keyboard = keyboardRef.current;
+        const target = droppableContainers.find((container) => container.id === keyboard.id);
+        if (!target) return [];
+        const data = target.data.current as DndData;
+        const rect = args.droppableRects.get(target.id);
+        if (rect) {
+          const geometry = dropGeometry(target.node.current, data, rect);
+          keyboard.point = {
+            x: geometry.rect.left + geometry.rect.width * keyboard.offset.x,
+            y: geometry.rect.top + geometry.rect.height * keyboard.offset.y,
+          };
+        }
+        return activeData && rect && validDropAt(activeData, data, {
+          node: target.node.current, rect, point: keyboard.point,
+        }) ? [{ id: target.id }] : [];
+      }
 
       const filtered = { ...args, droppableContainers };
       const pointerHits = pointerWithin(filtered);
       if (pointerHits.length) {
-        const pointerY = filtered.pointerCoordinates?.y ?? 0;
-        return [
-          [...pointerHits].sort((a, b) => {
+        const pointer = filtered.pointerCoordinates ?? centerOf(args.collisionRect);
+        const winner = [...pointerHits].sort((a, b) => {
             const aContainer = droppableContainers.find((container) => container.id === a.id);
             const bContainer = droppableContainers.find((container) => container.id === b.id);
-            const rank = dropRank(activeKind, aContainer?.data.current?.kind as string | undefined) -
-              dropRank(activeKind, bContainer?.data.current?.kind as string | undefined);
+            const aData = aContainer?.data.current as DndData | undefined;
+            const bData = bContainer?.data.current as DndData | undefined;
+            const aNode = aContainer?.node.current;
+            const bNode = bContainer?.node.current;
+            const aBox = aNode?.closest('[data-editor-overlay="element"]') ?? aNode;
+            const bBox = bNode?.closest('[data-editor-overlay="element"]') ?? bNode;
+            // Prefer the actual nested target, not an ancestor's full-size
+            // frame hit zone. At a container's outer edge, reorder it instead.
+            if (aBox && bBox && aBox !== bBox) {
+              const outerEdge = (node: HTMLElement | null | undefined, data: DndData | undefined) => {
+                if (!node || !data || !containerTarget(data)) return false;
+                const geometry = dropGeometry(node, data, node.getBoundingClientRect());
+                return resolveLayoutDrop({ ...geometry, point: pointer, container: true }).edge !== null;
+              };
+              if (aBox.contains(bBox)) return outerEdge(aNode, aData) ? -1 : 1;
+              if (bBox.contains(aBox)) return outerEdge(bNode, bData) ? 1 : -1;
+            }
+            const rank = dropRank(activeKind, aData) - dropRank(activeKind, bData);
             if (rank !== 0) return rank;
             const aRect = filtered.droppableRects.get(a.id);
             const bRect = filtered.droppableRects.get(b.id);
-            const aCenter = aRect ? aRect.top + aRect.height / 2 : 0;
-            const bCenter = bRect ? bRect.top + bRect.height / 2 : 0;
-            return Math.abs(aCenter - pointerY) - Math.abs(bCenter - pointerY);
-          })[0],
-        ];
+            const area = (aRect?.width ?? 0) * (aRect?.height ?? 0) - (bRect?.width ?? 0) * (bRect?.height ?? 0);
+            if (area !== 0) return area;
+            const distance = (rect?: DropRect) => rect ? Math.hypot(centerOf(rect).x - pointer.x, centerOf(rect).y - pointer.y) : Infinity;
+            return distance(aRect) - distance(bRect);
+          })[0];
+        const target = droppableContainers.find((container) => container.id === winner.id);
+        const data = target?.data.current as DndData | undefined;
+        const rect = args.droppableRects.get(winner.id);
+        // Invalid nested targets must not fall through to an ancestor section
+        // and silently insert somewhere other than the pointed-at slot.
+        return activeData && target && data && rect && validDropAt(activeData, data, {
+          node: target.node.current, rect, point: pointer,
+        }) ? [winner] : [];
       }
 
-      // Pointer drops outside a real target must cancel. Keyboard drags still need
-      // geometric fallback because they do not have pointer coordinates.
-      if (filtered.pointerCoordinates) return [];
-      return closestCorners(filtered);
-    },
-    [],
-  );
+      // Never fall back to a distant target when dropping outside the canvas.
+      return [];
+  };
 
-  function readActiveRect(id: UniqueIdentifier, objectId?: string): Pick<OverlayState, "width" | "height"> {
-    if (typeof document === "undefined") return {};
-    const selectorId = objectId ?? String(id);
-    const node =
-      (document.querySelector(`[data-editor-overlay][data-element-id="${CSS.escape(selectorId)}"]`) as HTMLElement | null) ||
-      (document.querySelector(`[data-editor-overlay][data-section-id="${CSS.escape(selectorId)}"]`) as HTMLElement | null) ||
-      (document.querySelector(`[data-editor-node="${CSS.escape(selectorId)}"]`) as HTMLElement | null);
-    if (!node) return {};
-    const rect = node.getBoundingClientRect();
+  function dragPoint(event: DragMoveEvent | DragEndEvent) {
+    const translated = event.active.rect.current.translated;
+    return pointerRef.current ?? keyboardRef.current?.point ?? (translated ? centerOf(translated) : { x: 0, y: 0 });
+  }
+
+  function dropLocation(event: DragMoveEvent | DragEndEvent): DropLocation {
     return {
-      width: Math.min(Math.round(rect.width), 360),
-      height: Math.min(Math.round(rect.height), 120),
+      node: nodesRef.current.get(event.over!.id) ?? null,
+      rect: event.over!.rect,
+      point: dragPoint(event),
     };
+  }
+
+  function placement(event: DragMoveEvent | DragEndEvent) {
+    const over = event.over!;
+    const data = over.data.current as DndData;
+    const geometry = dropGeometry(nodesRef.current.get(over.id) ?? null, data, over.rect);
+    return resolveLayoutDrop({ ...geometry, point: dragPoint(event), container: containerTarget(data) });
+  }
+
+  function resolveDropHint(event: DragMoveEvent): DropHintState | null {
+    if (!event.over) return null;
+    const activeData = event.active.data.current as DndData | undefined;
+    const overData = event.over.data.current as DndData | undefined;
+    if (!activeData?.kind || !overData?.kind || !validTarget(activeData, overData)) return null;
+    const location = dropLocation(event);
+    const geometry = dropGeometry(location.node, overData, location.rect);
+    if (overData.kind === "section-gap") return gapHint(geometry.rect, geometry.layout);
+    if (isElementDrag(activeData.kind)) {
+      const source = elementDragSource(page.sections, activeData, editorMode === "component");
+      return source.element ? resolveElementDrop(location, overData, source.element)?.hint ?? null : null;
+    }
+    return placement(event).hint;
+  }
+
+  function onDragMove(event: DragMoveEvent) {
+    setDropHint(resolveDropHint(event));
   }
 
   function describe(data: DndData | undefined, id: UniqueIdentifier) {
@@ -253,31 +404,39 @@ export function EditorDnd({ children }: { children: ReactNode }) {
   }
 
   function onDragStart(event: DragStartEvent) {
+    const data = event.active.data.current as DndData | undefined;
+    if (data && isElementDrag(data.kind)) {
+      const source = elementDragSource(page.sections, data, editorMode === "component");
+      if (source.issue) {
+        setOverlay(null);
+        setDropHint(null);
+        toast.message(placementIssueMessage(source.issue));
+        return;
+      }
+    }
     document.documentElement.dataset.dragging = "1";
+    keyboardRef.current = null;
     const activator = event.activatorEvent as Event & {
+      clientX?: number;
       clientY?: number;
-      touches?: ArrayLike<{ clientY: number }>;
+      touches?: ArrayLike<{ clientX: number; clientY: number }>;
     };
-    pointerYRef.current =
-      typeof activator.clientY === "number" ? activator.clientY : activator.touches?.[0]?.clientY ?? null;
-    if (pointerYRef.current !== null) {
-      const pointer = (pointerEvent: PointerEvent) => {
-        pointerYRef.current = pointerEvent.clientY;
-      };
-      const touch = (touchEvent: TouchEvent) => {
-        const point = touchEvent.touches[0];
-        if (point) pointerYRef.current = point.clientY;
+    const initial = activator.touches?.[0] ?? activator;
+    pointerRef.current = typeof initial.clientX === "number" && typeof initial.clientY === "number"
+      ? { x: initial.clientX, y: initial.clientY } : null;
+    if (pointerRef.current) {
+      const pointer = (event: MouseEvent) => { pointerRef.current = { x: event.clientX, y: event.clientY }; };
+      const touch = (event: TouchEvent) => {
+        const point = event.touches[0];
+        if (point) pointerRef.current = { x: point.clientX, y: point.clientY };
       };
       pointerListenersRef.current = { pointer, touch };
       window.addEventListener("pointermove", pointer, { passive: true });
+      window.addEventListener("mousemove", pointer, { passive: true });
       window.addEventListener("touchmove", touch, { passive: true });
     }
-    const data = event.active.data.current as DndData | undefined;
-    const objectId = data?.elementId ?? data?.sectionId;
-    const size = readActiveRect(event.active.id, objectId);
-
     if (data?.kind === "library-element") {
-      setOverlay({ label: String(data.type ?? "Element") });
+      setOverlay({ label: String(data.label ?? data.type ?? "Element") });
       return;
     }
     if (data?.kind === "library-section") {
@@ -291,7 +450,7 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     if (data?.kind === "section" || data?.kind === "layer-section") {
       const sectionId = data.sectionId ?? String(event.active.id);
       const section = page.sections.find((item) => item.id === sectionId);
-      setOverlay({ label: section?.name || "Section", ...size });
+      setOverlay({ label: section?.name || "Section" });
       return;
     }
     if (data?.kind === "element" || data?.kind === "layer-element") {
@@ -303,31 +462,29 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         (typeof element?.props.label === "string" && element.props.label) ||
         element?.type ||
         "Element";
-      setOverlay({ label: String(text).slice(0, 48), ...size });
+      setOverlay({ label: String(text).slice(0, 48) });
       return;
     }
-    setOverlay({ label: "Item", ...size });
+    setOverlay({ label: "Item" });
   }
 
   function clearDrag() {
     delete document.documentElement.dataset.dragging;
     if (pointerListenersRef.current) {
       window.removeEventListener("pointermove", pointerListenersRef.current.pointer);
+      window.removeEventListener("mousemove", pointerListenersRef.current.pointer);
       window.removeEventListener("touchmove", pointerListenersRef.current.touch);
     }
     pointerListenersRef.current = null;
-    pointerYRef.current = null;
+    pointerRef.current = null;
+    keyboardRef.current = null;
+    nodesRef.current.clear();
     setOverlay(null);
+    setDropHint(null);
   }
 
   function droppedAfter(event: DragEndEvent) {
-    if (!event.over) return false;
-    const activator = event.activatorEvent as Event & { code?: string };
-    if (pointerYRef.current === null && activator.code) return event.delta.y > 0;
-    const translated = event.active.rect.current.translated;
-    const dragCenter = translated ? translated.top + translated.height / 2 : event.over.rect.top;
-    const pointerY = pointerYRef.current ?? dragCenter;
-    return pointerY > event.over.rect.top + event.over.rect.height / 2;
+    return event.over ? placement(event).edge === "after" : false;
   }
 
   function sectionInsertIndex(event: DragEndEvent, overData: DndData) {
@@ -339,37 +496,78 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     return page.sections.length;
   }
 
-  function elementTarget(event: DragEndEvent, overData: DndData, element: PageElement): ElementTarget | null {
-    const base = slotForTarget(overData, element);
-    if (!base) return null;
-
-    if (overData.kind === "element-insert" && typeof overData.atIndex === "number") {
-      return { ...base, atIndex: overData.atIndex };
-    }
-
-    if ((overData.kind === "element" || overData.kind === "layer-element") && overData.elementId) {
-      const section = page.sections.find((item) => item.id === base.sectionId);
-      const overElement = section ? findElement(section, overData.elementId)?.element : null;
-      if (overElement && isContainerElement(overElement.type)) return base;
-      if (!section) return base;
-      const frameParent = parseFrameSlotId(base.slotId);
-      const items = frameParent
-        ? findElement(section, frameParent)?.element.children ?? []
-        : elementsSlot(section, base.slotId);
-      const index = items.findIndex((item) => item.id === overData.elementId);
-      if (index >= 0) return { ...base, atIndex: index + (droppedAfter(event) ? 1 : 0) };
-    }
-
-    return base;
+  function targetAroundElement(
+    sectionId: string,
+    slotId: string,
+    elementId: string,
+    edge: "before" | "after",
+  ): ElementTarget | null {
+    const section = page.sections.find((item) => item.id === sectionId);
+    if (!section) return null;
+    const frameParent = parseFrameSlotId(slotId);
+    const items = frameParent
+      ? findElement(section, frameParent)?.element.children ?? []
+      : elementsSlot(section, slotId);
+    const index = items.findIndex((item) => item.id === elementId);
+    return index >= 0 ? { sectionId, slotId, atIndex: index + (edge === "after" ? 1 : 0) } : null;
   }
 
-  function validateElementTarget(element: PageElement, target: ElementTarget) {
+  function resolveElementDrop({ node, rect, point }: DropLocation, data: DndData, element: PageElement, reportIssue = false):
+    { target: ElementTarget; hint: LayoutHint } | null {
+    const geometry = dropGeometry(node, data, rect);
+    const result = resolveLayoutDrop({ ...geometry, point, container: containerTarget(data) });
+    const base = slotForTarget(data, element);
+    if (!base) return null;
+    const finish = (target: ElementTarget, hint: LayoutHint) => {
+      const issue = elementTargetIssue(element, target);
+      if (issue) {
+        if (reportIssue) toast.message(placementIssueMessage(issue));
+        return null;
+      }
+      return { target, hint };
+    };
+    if (data.kind === "element-insert" && typeof data.atIndex === "number") {
+      return finish({ ...base, atIndex: data.atIndex }, gapHint(geometry.rect, geometry.layout));
+    }
+    const id = data.kind === "frame" ? data.parentId : data.elementId;
+    if (id && result.edge) {
+      const section = page.sections.find((item) => item.id === data.sectionId);
+      const found = section && findElement(section, id);
+      const target = found && targetAroundElement(base.sectionId, found.slotId, id, result.edge);
+      if (target) return finish(target, result.hint);
+    }
+    // Container centers insert into that container; edges use its *parent's*
+    // axis. Resolve blank space against the children's actual wrapped/grid boxes.
+    const parentId = parseFrameSlotId(base.slotId);
+    if (parentId && node?.closest("[data-editor-canvas]")) {
+      const section = page.sections.find((item) => item.id === base.sectionId);
+      const children = section ? findElement(section, parentId)?.element.children ?? [] : [];
+      const canvas = node.closest("[data-editor-canvas]")!;
+      const paint = canvas.querySelector<HTMLElement>(`[data-editor-node="${CSS.escape(parentId)}"]`);
+      const innerLayout = paint ? layoutFromStyle(getComputedStyle(paint)) : verticalLayout;
+      const items = [...canvas.querySelectorAll<HTMLElement>("[data-element-id]")]
+        .filter((item) => item.dataset.slotId === base.slotId && item.dataset.sectionId === base.sectionId)
+        .map((item) => ({ rect: item.getBoundingClientRect(), index: children.findIndex((child) => child.id === item.dataset.elementId) }))
+        .filter((item) => item.index >= 0 && item.rect.width > 0 && item.rect.height > 0);
+      const insertion = nearestInsertion(items, point, innerLayout);
+      if (insertion) return finish({ ...base, atIndex: insertion.index }, insertion.hint);
+      return finish({ ...base, atIndex: children.length }, { mode: "container", ...geometry.rect });
+    }
+    return finish(base, { mode: "container", ...geometry.rect });
+  }
+
+  function elementTargetIssue(element: PageElement, target: ElementTarget): ElementPlacementIssue | null {
     const section = page.sections.find((item) => item.id === target.sectionId);
-    const issue = section
+    return section
       ? getElementPlacementIssue(section, target.slotId, element, { allowComponentRoot: editorMode === "component" })
       : "missing-target";
-    if (issue) toast.message(placementIssueMessage(issue));
-    return !issue;
+  }
+
+  function validDropAt(active: DndData, target: DndData, location: DropLocation) {
+    if (!validTarget(active, target)) return false;
+    if (!isElementDrag(active.kind) || target.kind === "section-gap") return true;
+    const source = elementDragSource(page.sections, active, editorMode === "component");
+    return Boolean(source.element && resolveElementDrop(location, target, source.element));
   }
 
   function onDragEnd(event: DragEndEvent) {
@@ -379,6 +577,16 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       const activeData = active.data.current as DndData | undefined;
       const overData = over.data.current as DndData | undefined;
       if (!activeData || !overData) return;
+      // Recheck source permissions at commit time in case the page changed
+      // since pickup (or a sensor retained a now-protected source).
+      if (isElementDrag(activeData.kind)) {
+        const source = elementDragSource(page.sections, activeData, editorMode === "component");
+        if (source.issue) {
+          toast.message(placementIssueMessage(source.issue));
+          return;
+        }
+      }
+      if (!validTarget(activeData, overData)) return;
 
       if (activeData.kind === "library-section" && activeData.type) {
         addSection(activeData.type as SectionType, sectionInsertIndex(event, overData));
@@ -395,14 +603,14 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       if (activeData.kind === "library-element" && activeData.type) {
         const type = activeData.type as ElementType;
         if (overData.kind === "section-gap" && typeof overData.atIndex === "number") {
-          insertElementBetweenSections(type, overData.atIndex);
+          insertElementBetweenSections(type, overData.atIndex, activeData.props);
           toast.success(`${type} block added`);
           return;
         }
-        const preview: PageElement = { id: "drag-preview", type, props: {} };
-        const target = elementTarget(event, overData, preview);
-        if (!target || !validateElementTarget(preview, target)) return;
-        addElement(target.sectionId, type, target.slotId, target.atIndex);
+        const preview: PageElement = { id: "drag-preview", type, props: activeData.props ?? {} };
+        const target = resolveElementDrop(dropLocation(event), overData, preview, true)?.target;
+        if (!target) return;
+        addElement(target.sectionId, type, target.slotId, target.atIndex, activeData.props);
         toast.success(`${type} added`);
         return;
       }
@@ -423,8 +631,8 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         if (!fromSectionId || !fromSlotId) return;
         const sourceSection = page.sections.find((section) => section.id === fromSectionId);
         const movingElement = sourceSection ? findElement(sourceSection, elementId)?.element : null;
-        const target = movingElement ? elementTarget(event, overData, movingElement) : null;
-        if (!movingElement || !target || !validateElementTarget(movingElement, target)) return;
+        const target = movingElement ? resolveElementDrop(dropLocation(event), overData, movingElement, true)?.target : null;
+        if (!movingElement || !target) return;
 
         const sameContainer = fromSectionId === target.sectionId && fromSlotId === target.slotId;
         if (!sameContainer) {
@@ -457,6 +665,7 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always, measure: (node) => node.getBoundingClientRect() } }}
       autoScroll={{ threshold: { x: 0.12, y: 0.12 }, acceleration: 18, interval: 6 }}
       accessibility={{
         screenReaderInstructions: {
@@ -476,19 +685,38 @@ export function EditorDnd({ children }: { children: ReactNode }) {
         },
       }}
       onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragOver={onDragMove}
       onDragEnd={onDragEnd}
       onDragCancel={clearDrag}
     >
       <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
+      {dropHint?.mode === "edge" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed z-100 rounded-full bg-[#0d99ff] shadow-[0_0_0_1px_rgba(255,255,255,0.8)]"
+          style={{ top: dropHint.top, left: dropHint.left, width: dropHint.width, height: dropHint.height }}
+        />
+      ) : dropHint?.mode === "container" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed z-100 rounded-[3px] bg-[#0d99ff]/5 shadow-[inset_0_0_0_2px_#0d99ff]"
+          style={{
+            top: dropHint.top,
+            left: dropHint.left,
+            width: dropHint.width,
+            height: dropHint.height,
+          }}
+        />
+      ) : null}
       <DragOverlay dropAnimation={null} style={{ cursor: "grabbing" }}>
         {overlay ? (
           <div
-            className="pointer-events-none overflow-hidden rounded border border-zinc-300 bg-white/95 px-2.5 py-1.5 text-[12px] font-medium text-zinc-800 shadow-sm"
-            style={{
-              width: overlay.width ? Math.max(overlay.width, 72) : undefined,
-              minHeight: overlay.height ? Math.min(overlay.height, 48) : undefined,
-              maxWidth: 360,
-            }}
+            className={`pointer-events-none w-max max-w-48 truncate whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium shadow-sm ${
+              dark
+                ? "border-zinc-700 bg-zinc-900/95 text-zinc-100"
+                : "border-zinc-300 bg-white/95 text-zinc-800"
+            }`}
           >
             {overlay.label}
           </div>

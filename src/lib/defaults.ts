@@ -1,9 +1,11 @@
 import { nanoid } from "nanoid";
 import { migrateSection } from "@/lib/migrate";
-import { cloneNodeMeta, cloneStyleProps } from "@/lib/node-styles";
+import { cloneNodeMeta } from "@/lib/node-styles";
 import type {
   ElementType,
   LandingPage,
+  NodeMeta,
+  ValueBinding,
   PageElement,
   PageSection,
   SectionType,
@@ -56,7 +58,7 @@ export function createElement(
     styles:
       type === "heading" || type === "paragraph"
         ? { margin: { top: "0", right: "0", bottom: "0", left: "0" } }
-        : type === "frame"
+        : type === "frame" || type === "conditional"
           ? {
               display: "flex",
               flexDirection: "row",
@@ -65,9 +67,31 @@ export function createElement(
               gap: "12px",
               width: "100%",
             }
-          : {},
-    children: type === "frame" || type === "slot" || type === "list" ? [] : undefined,
+          : type === "shape"
+            ? {
+                width: "180px",
+                height: "180px",
+                background: "var(--lp-primary)",
+                borderRadius: "9999px",
+                opacity: "0.35",
+                position: "absolute",
+                top: "24px",
+                right: "24px",
+                zIndex: "0",
+                filterBlur: "32px",
+              }
+            : {},
+    children:
+      type === "frame" || type === "slot" || type === "list" || type === "conditional"
+        ? []
+        : undefined,
   };
+  if (type === "conditional") {
+    base.children = [
+      createElement("frame", { branch: "then", label: "Then" }),
+      createElement("frame", { branch: "else", label: "Else" }),
+    ];
+  }
   if (type === "list") {
     base.children = [
       {
@@ -141,46 +165,108 @@ export function defaultElementProps(type: ElementType): Record<string, unknown> 
           { title: "Item three", body: "Describe this item." },
         ],
       };
+    case "shape":
+      return { label: "Decorative circle" };
+    case "svg":
+      return {
+        label: "Sparkle icon",
+        markup:
+          '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l1.45 5.55L19 9l-5.55 1.45L12 16l-1.45-5.55L5 9l5.55-1.45L12 2Z" fill="currentColor"/><path d="m19 15 .72 2.28L22 18l-2.28.72L19 21l-.72-2.28L16 18l2.28-.72L19 15Z" fill="currentColor"/></svg>',
+      };
+    case "conditional":
+      return {
+        variableName: "",
+        operator: "truthy",
+        value: true,
+      };
     default:
       return {};
   }
 }
 
-export function cloneElementNode(element: PageElement): PageElement {
-  return {
-    ...element,
-    ...cloneNodeMeta(element),
-    id: nanoid(10),
-    props: { ...element.props },
-    styles: cloneStyleProps(element.styles),
-    textSlot: element.textSlot ? { ...element.textSlot } : element.textSlot,
-    children: element.children?.map(cloneElementNode),
+type CloneOptions = { namespace?: string; preserveStyleSource?: boolean };
+
+function cloneContext(nodes: Array<NodeMeta & { id: string }>, options: CloneOptions = {}) {
+  const nodeIds = new Map<string, string>();
+  const variableIds = new Map<string, string>();
+  const htmlIds = new Map<string, string>();
+  const makeId = (kind: string, id: string) => options.namespace === undefined
+    ? nanoid(10) : `instance:${encodeURIComponent(options.namespace)}:${kind}:${encodeURIComponent(id)}`;
+  for (const node of nodes) {
+    nodeIds.set(node.id, makeId("node", node.id));
+    if (node.htmlId) htmlIds.set(node.htmlId, makeId("html", node.htmlId));
+    for (const variable of node.variables ?? []) variableIds.set(variable.id, makeId("variable", variable.id));
+  }
+  const binding = (value: ValueBinding): ValueBinding => value.mode === "variable"
+    ? { ...value, variableId: variableIds.get(value.variableId) ?? value.variableId } : { ...value };
+  const meta = (node: NodeMeta & { id: string }) => ({
+    ...cloneNodeMeta(node),
+    id: nodeIds.get(node.id)!,
+    htmlId: node.htmlId ? htmlIds.get(node.htmlId) : node.htmlId,
+    styleSourceId: options.preserveStyleSource ? node.styleSourceId ?? node.id : undefined,
+    variables: node.variables?.map((variable) => ({ ...structuredClone(variable), id: variableIds.get(variable.id)! })),
+    interactions: node.interactions?.map((interaction) => {
+      const action = structuredClone(interaction.action);
+      if (action.type === "remove-element" || action.type === "change-style") action.targetId = nodeIds.get(action.targetId) ?? action.targetId;
+      if (action.type === "set-variable" || action.type === "toggle-variable") action.variableName = variableIds.get(action.variableName) ?? action.variableName;
+      if (action.type === "set-variable" && action.binding) action.binding = binding(action.binding);
+      return { ...interaction, id: makeId("interaction", interaction.id), action };
+    }),
+  });
+  const element = (node: PageElement): PageElement => {
+    const props = structuredClone(node.props);
+    if (typeof props.href === "string" && props.href.startsWith("#")) {
+      const target = htmlIds.get(props.href.slice(1));
+      if (target) props.href = `#${encodeURIComponent(target)}`;
+    }
+    if (typeof props.variableName === "string") props.variableName = variableIds.get(props.variableName) ?? props.variableName;
+    if (props.condition && typeof props.condition === "object" && "variableName" in props.condition) {
+      const condition = props.condition as Record<string, unknown>;
+      if (typeof condition.variableName === "string") condition.variableName = variableIds.get(condition.variableName) ?? condition.variableName;
+    }
+    return {
+      ...node, ...meta(node), props,
+      bindings: node.bindings ? Object.fromEntries(Object.entries(node.bindings).map(([key, value]) => [key, binding(value)])) : undefined,
+      textSlot: node.textSlot ? { ...node.textSlot } : node.textSlot,
+      children: node.children?.map(element),
+    };
   };
+  const slots = (values?: Record<string, SlotValue>) => values ? Object.fromEntries(Object.entries(values).map(([key, value]) => [
+    nodeIds.get(key) ?? key,
+    Array.isArray(value) ? value.map(element) : value && typeof value === "object" ? element(value) : value,
+  ])) : undefined;
+  return { nodeIds, meta, element, slots };
+}
+
+function flattenElements(elements: PageElement[]): PageElement[] {
+  return elements.flatMap((element) => [element, ...flattenElements(element.children ?? [])]);
+}
+
+/** Clone the entire forest together so sibling targets and local variable IDs are remapped consistently. */
+export function cloneElementNodes(elements: PageElement[], options?: CloneOptions): PageElement[] {
+  const context = cloneContext(flattenElements(elements), options);
+  return elements.map(context.element);
+}
+
+export function cloneElementNode(element: PageElement): PageElement {
+  return cloneElementNodes([element])[0];
 }
 
 export function cloneSection(
   section: PageSection,
   options?: { id?: string; name?: string },
 ): PageSection {
-  const slots: Record<string, SlotValue> = {};
-  for (const [key, value] of Object.entries(section.slots ?? {})) {
-    if (Array.isArray(value)) {
-      slots[key] = value.map(cloneElementNode);
-    } else if (value && typeof value === "object" && "type" in value && "id" in value) {
-      slots[key] = cloneElementNode(value as PageElement);
-    } else {
-      slots[key] = value;
-    }
-  }
+  const roots = [...Object.values(section.slots ?? {}), ...Object.values(section.slotOverrides ?? {})]
+    .flatMap((value) => Array.isArray(value) ? value : value && typeof value === "object" ? [value] : []);
+  const context = cloneContext([section, ...flattenElements([...roots, ...(section.elements ?? [])])]);
+  if (options?.id) context.nodeIds.set(section.id, options.id);
   return {
-    ...section,
-    ...cloneNodeMeta(section),
-    id: options?.id ?? nanoid(10),
+    ...section, ...context.meta(section),
     name: options?.name ?? `${section.name} copy`,
-    props: { ...section.props },
-    slots,
-    slotOverrides: section.slotOverrides ? { ...section.slotOverrides } : undefined,
-    styles: cloneStyleProps(section.styles),
+    props: structuredClone(section.props),
+    slots: context.slots(section.slots),
+    slotOverrides: context.slots(section.slotOverrides),
+    elements: section.elements?.map(context.element),
   };
 }
 
@@ -552,6 +638,7 @@ export function createBlankPage(
     clientName: overrides.clientName ?? "Internal",
     status: "draft",
     theme: defaultTheme(overrides.clientName ?? name),
+    variables: [],
     sections: [createSection("navbar"), createSection("hero"), createSection("footer")],
     createdAt: now,
     updatedAt: now,
@@ -567,6 +654,7 @@ export function createDemoPage(): LandingPage {
     clientName: "Northstar",
     status: "published",
     theme: defaultTheme("Northstar"),
+    variables: [],
     sections: [
       createSection("navbar"),
       createSection("hero"),
@@ -630,6 +718,9 @@ export const ELEMENT_CATALOG: {
   { type: "frame", label: "Frame", description: "Layout box" },
   { type: "slot", label: "Element slot", description: "Fillable drop target in components" },
   { type: "list", label: "List / ForEach", description: "Repeat a template for each item" },
+  { type: "conditional", label: "Conditional", description: "Show children when a variable matches" },
+  { type: "shape", label: "Shape", description: "Decorative circle or layout shape" },
+  { type: "svg", label: "SVG", description: "Sanitized inline SVG artwork" },
   { type: "separator", label: "Separator", description: "Horizontal rule" },
 ];
 

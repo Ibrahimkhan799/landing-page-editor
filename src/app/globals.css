@@ -148,6 +148,34 @@ body {
   --tw-ring-shadow: 0 0 #0000;
 }
 
+.dark.editor-ui input:focus-visible,
+.dark.editor-ui textarea:focus-visible,
+.dark.editor-ui button[role="combobox"]:focus,
+.dark.editor-ui button[role="combobox"]:focus-visible,
+.dark .editor-ui input:focus-visible,
+.dark .editor-ui textarea:focus-visible,
+.dark .editor-ui button[role="combobox"]:focus,
+.dark .editor-ui button[role="combobox"]:focus-visible {
+  border-color: #52525b;
+}
+
+.editor-checkerboard {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #f4f4f5 25%, transparent 25%, transparent 75%, #f4f4f5 75%),
+    linear-gradient(45deg, #f4f4f5 25%, #ffffff 25%, #ffffff 75%, #f4f4f5 75%);
+  background-position: 0 0, 5px 5px;
+  background-size: 10px 10px;
+}
+
+.dark.editor-checkerboard,
+.dark .editor-checkerboard {
+  background-color: #18181b;
+  background-image:
+    linear-gradient(45deg, #27272a 25%, transparent 25%, transparent 75%, #27272a 75%),
+    linear-gradient(45deg, #27272a 25%, #18181b 25%, #18181b 75%, #27272a 75%);
+}
+
 .color-picker .react-colorful__hue,
 .color-picker .react-colorful__alpha {
   height: 8px;

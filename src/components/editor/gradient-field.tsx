@@ -81,13 +81,13 @@ export function GradientField({
 
   return (
     <div className="grid gap-1.5">
-      {label ? <Label className="text-[11px] text-zinc-500">{label}</Label> : null}
+      {label ? <Label className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</Label> : null}
       <div className="h-6 rounded-[3px] ring-1 ring-black/5" style={{ backgroundImage: gradient }} />
       <div className="grid grid-cols-2 gap-1">
         <select
           value={parsed.kind}
           onChange={(event) => update({ kind: event.target.value })}
-          className="h-5 rounded-[3px] border-0 bg-zinc-100 px-1.5 text-[11px] text-zinc-700 outline-none"
+          className="h-5 rounded-[3px] border-0 bg-zinc-100 px-1.5 text-[11px] text-zinc-700 outline-none dark:bg-zinc-800 dark:text-zinc-200 dark:[color-scheme:dark]"
         >
           <option value="linear">Linear</option>
           <option value="radial">Radial</option>
@@ -108,7 +108,7 @@ export function GradientField({
       ) : null}
       <button
         type="button"
-        className="h-5 text-left text-[10px] uppercase tracking-wide text-zinc-400 hover:text-zinc-700"
+        className="h-5 text-left text-[10px] uppercase tracking-wide text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
         onClick={() =>
           update({
             stops: [...parsed.stops].reverse().map((stop, index) => ({
@@ -125,7 +125,7 @@ export function GradientField({
           <div key={`${stop.color}-${index}`} className="flex items-center gap-1">
             <Popover>
               <PopoverTrigger asChild>
-                <button type="button" className="flex h-5 min-w-0 flex-1 items-center gap-1.5 rounded-[3px] bg-zinc-100 px-1.5">
+                <button type="button" className="flex h-5 min-w-0 flex-1 items-center gap-1.5 rounded-[3px] bg-zinc-100 px-1.5 dark:bg-zinc-800 dark:text-zinc-200">
                   <ColorSwatch color={stop.color} />
                   <span className="truncate font-mono text-[10px]">{stop.color}</span>
                 </button>
@@ -154,14 +154,14 @@ export function GradientField({
       {parsed.stops.length < 5 ? (
         <button
           type="button"
-          className="flex h-5 items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800"
+          className="flex h-5 items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
           onClick={() => update({ stops: [...parsed.stops, nextStop(parsed.stops)] })}
         >
           <Plus className="size-3" />
           Add color
         </button>
       ) : null}
-      <button type="button" className="text-left text-[11px] text-zinc-400 hover:text-zinc-700" onClick={() => onChange("")}>
+      <button type="button" className="text-left text-[11px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => onChange("")}>
         Clear gradient
       </button>
     </div>

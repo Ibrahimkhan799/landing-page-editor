@@ -1,4 +1,7 @@
 import { AnimationStyles } from "@/components/landing/animate";
+import { LandingRuntimeProvider, LandingRuntimeScope } from "@/components/landing/runtime";
+import { applySlotOverrides } from "@/lib/component-slots";
+import { migratePage } from "@/lib/migrate";
 import { LandingSection } from "@/components/landing/sections";
 import { collectStyledNodes, nodeStylesheet } from "@/lib/node-styles";
 import { themeStyle } from "@/lib/theme";
@@ -11,14 +14,20 @@ export function PageRenderer({
   page: LandingPage;
   interactive?: boolean;
 }) {
-  const css = nodeStylesheet(collectStyledNodes(page));
+  const migrated = migratePage(page);
+  const prepared = { ...migrated, sections: migrated.sections.map(applySlotOverrides) };
+  const css = nodeStylesheet(collectStyledNodes(prepared));
   return (
-    <div className="min-h-full overflow-hidden" style={themeStyle(page.theme)}>
-      <AnimationStyles />
-      {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
-      {page.sections.map((section) => (
-        <LandingSection key={section.id} section={section} theme={page.theme} interactive={interactive} />
-      ))}
-    </div>
+    <LandingRuntimeProvider page={prepared}>
+      <div className="min-h-full overflow-hidden" style={themeStyle(page.theme)}>
+        <AnimationStyles />
+        {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+        {prepared.sections.map((section) => (
+          <LandingRuntimeScope key={section.id} nodeId={section.id}>
+            <LandingSection section={section} theme={page.theme} interactive={interactive} />
+          </LandingRuntimeScope>
+        ))}
+      </div>
+    </LandingRuntimeProvider>
   );
 }

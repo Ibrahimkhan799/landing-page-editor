@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, MouseEvent as ReactMouseEvent } from "react";
+import type { ReactNode, MouseEvent as ReactMouseEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/context-menu";
 import { useEditor } from "@/components/editor/editor-context";
 import { createBlankBlockSection } from "@/lib/defaults";
-import { findElement, isBuiltInSectionType, isContainerElement } from "@/lib/slots";
-import type { PageElement, PageSection } from "@/lib/types";
+import { findElement, getElementPlacementIssue, getElementStructureIssue, isBuiltInSectionType, isContainerElement, isElementEditableInInstance } from "@/lib/slots";
+import { getEnclosureIssue, type EnclosureType } from "@/lib/tree-operations";
+import type { PageElement, PageSection, Selection } from "@/lib/types";
 import { nanoid } from "nanoid";
 
 export type ContextTarget =
@@ -59,44 +60,30 @@ function resolveTargetFromEvent(
   return null;
 }
 
-export function CanvasEditorContextMenu({
-  children,
+function EditorContextMenuContent({
+  target,
   pageId,
+  onCloseAutoFocus,
 }: {
-  children: ReactNode;
+  target: ContextTarget | null;
   pageId?: string | null;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const {
     page,
     editorMode,
     selection,
-    selectedElement,
-    selectedSection,
+    selectedRefs,
     duplicateSection,
     removeSection,
     duplicateElement,
     removeElement,
     updateSection,
     updateElement,
+    updateElementProp,
+    encloseSelection,
   } = useEditor();
   const router = useRouter();
-  const [target, setTarget] = useState<ContextTarget | null>(null);
-  const targetRef = useRef<ContextTarget | null>(null);
-
-  function targetFromSelection(): ContextTarget | null {
-    if (selection.kind === "element" && selectedElement && selectedSection) {
-      return {
-        kind: "element",
-        sectionId: selection.sectionId,
-        slotId: selection.slotId,
-        element: selectedElement,
-      };
-    }
-    if (selection.kind === "section" && selectedSection) {
-      return { kind: "section", section: selectedSection };
-    }
-    return null;
-  }
 
   async function saveSectionAsComponent(section: PageSection) {
     const name = window.prompt("Name this component", section.name);
@@ -122,7 +109,7 @@ export function CanvasEditorContextMenu({
       name,
       element: { ...element, id: nanoid(10) },
     });
-    const { id: _id, ...section } = block;
+    const section = { ...block, id: undefined };
     const response = await fetch("/api/components", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -142,7 +129,9 @@ export function CanvasEditorContextMenu({
         label: "Edit",
         onClick: () => {
           const from = pageId || page.id;
-          router.push(`/admin/component/${saved.id}?from=${encodeURIComponent(from)}`);
+          const href = `/admin/component/${saved.id}?from=${encodeURIComponent(from)}`;
+          router.prefetch(href);
+          router.push(href);
         },
       },
     });
@@ -176,38 +165,59 @@ export function CanvasEditorContextMenu({
   function openComponent(componentId: string) {
     const from = pageId || (editorMode === "page" ? page.id : null);
     const q = from ? `?from=${encodeURIComponent(from)}` : "";
-    router.push(`/admin/component/${componentId}${q}`);
+    const href = `/admin/component/${componentId}${q}`;
+    router.prefetch(href);
+    router.push(href);
   }
 
-  const active = target ?? targetRef.current;
+  // Resolve the live node by ID; a menu may outlive the render that opened it.
+  const host = target && page.sections.find((section) => section.id === (target.kind === "section" ? target.section.id : target.sectionId));
+  const found = target?.kind === "element" && host ? findElement(host, target.element.id) : null;
+  const active: ContextTarget | null = target?.kind === "section" && host
+    ? { kind: "section", section: host }
+    : target?.kind === "element" && found
+      ? { ...target, slotId: found.slotId, element: found.element }
+      : null;
+  const options = { allowComponentRoot: editorMode === "component" };
+  const structureIssue = active?.kind === "element" && host
+    ? getElementStructureIssue(host, active.element.id, options)
+    : null;
+  const editable = active?.kind === "element" && host &&
+    (editorMode === "component" || isElementEditableInInstance(host, active.element.id));
+  const canDuplicate = active?.kind === "element" && host && !structureIssue &&
+    !getElementPlacementIssue(host, active.slotId, { ...active.element, id: "" }, options);
+  const enclosureTarget: Selection = active?.kind === "element"
+    ? selectedRefs.some((ref) => ref.sectionId === active.sectionId && ref.elementId === active.element.id)
+      ? selection
+      : { kind: "element", sectionId: active.sectionId, slotId: active.slotId, elementId: active.element.id }
+    : { kind: "page" };
+  const enclosureRefs = enclosureTarget.kind === "element" ? [enclosureTarget]
+    : enclosureTarget.kind === "elements" ? enclosureTarget.items : [];
+
+  function enclose(type: EnclosureType) {
+    if (!encloseSelection(type, enclosureTarget)) toast.error("These layers cannot be enclosed here");
+  }
+
+  function rename() {
+    if (!active) return;
+    if (active.kind === "section") {
+      const name = window.prompt("Rename section", active.section.name)?.trim();
+      if (name) updateSection(active.section.id, { name });
+    } else if (editable && isContainerElement(active.element.type)) {
+      const key = active.element.type === "slot" ? "name" : "label";
+      const name = window.prompt("Rename layer", String(active.element.props[key] || active.element.type))?.trim();
+      if (name) updateElementProp(active.sectionId, active.element.id, key, name);
+    }
+  }
 
   return (
-    <ContextMenu
-      onOpenChange={(open) => {
-        if (!open) {
-          targetRef.current = null;
-          setTarget(null);
-        }
-      }}
-    >
-      <ContextMenuTrigger asChild>
-        <div
-          className="min-h-full"
-          onContextMenu={(event) => {
-            const resolved = resolveTargetFromEvent(event, page) || targetFromSelection();
-            targetRef.current = resolved;
-            setTarget(resolved);
-          }}
-        >
-          {children}
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="editor-ui min-w-[12rem]">
+      <ContextMenuContent className="editor-ui min-w-[12rem]" onCloseAutoFocus={onCloseAutoFocus}>
         {!active ? (
           <ContextMenuItem disabled>Select a layer first</ContextMenuItem>
         ) : active.kind === "section" ? (
           <>
             <ContextMenuLabel>Section · {active.section.name}</ContextMenuLabel>
+            <ContextMenuItem onSelect={rename}>Rename…</ContextMenuItem>
             {active.section.componentId ? (
               <ContextMenuItem onSelect={() => openComponent(active.section.componentId!)}>
                 Edit component
@@ -236,31 +246,45 @@ export function CanvasEditorContextMenu({
           </>
         ) : (
           <>
-            <ContextMenuLabel>{active.element.type}</ContextMenuLabel>
-            <ContextMenuItem onSelect={() => void saveElementAsComponent(active.sectionId, active.element)}>
+            <ContextMenuLabel>{active.element.type === "conditional" ? "IF" : active.element.type}</ContextMenuLabel>
+            {isContainerElement(active.element.type) ? (
+              <ContextMenuItem disabled={!editable} onSelect={rename}>Rename…</ContextMenuItem>
+            ) : null}
+            <ContextMenuItem disabled={Boolean(structureIssue)} onSelect={() => void saveElementAsComponent(active.sectionId, active.element)}>
               Create component
             </ContextMenuItem>
             {(typeof active.element.props.text === "string" ||
               typeof active.element.props.label === "string" ||
               typeof active.element.props.title === "string") && (
-              <ContextMenuItem onSelect={() => createTextSlot(active.sectionId, active.element)}>
+              <ContextMenuItem disabled={!editable || (editorMode === "page" && Boolean(host?.componentId))} onSelect={() => createTextSlot(active.sectionId, active.element)}>
                 {active.element.textSlot ? "Edit text slot…" : "Create text slot…"}
               </ContextMenuItem>
             )}
             {active.element.textSlot ? (
-              <ContextMenuItem onSelect={() => clearTextSlot(active.sectionId, active.element)}>
+              <ContextMenuItem disabled={!editable || (editorMode === "page" && Boolean(host?.componentId))} onSelect={() => clearTextSlot(active.sectionId, active.element)}>
                 Remove text slot
               </ContextMenuItem>
             ) : null}
-            {isContainerElement(active.element.type) ? (
-              <ContextMenuItem disabled>Container · drop elements inside</ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem disabled={Boolean(getEnclosureIssue(page, enclosureRefs, "frame", options))} onSelect={() => enclose("frame")}>
+              Enclose in Frame
+            </ContextMenuItem>
+            <ContextMenuItem disabled={Boolean(getEnclosureIssue(page, enclosureRefs, "conditional", options))} onSelect={() => enclose("conditional")}>
+              Enclose in IF
+            </ContextMenuItem>
+            {structureIssue === "branch-scaffold" ? (
+              <ContextMenuItem disabled>IF branch · edit its contents</ContextMenuItem>
+            ) : structureIssue === "locked" ? (
+              <ContextMenuItem disabled>Component structure is locked</ContextMenuItem>
             ) : null}
-            <ContextMenuItem onSelect={() => duplicateElement(active.sectionId, active.element.id)}>
+            <ContextMenuSeparator />
+            <ContextMenuItem disabled={!canDuplicate} onSelect={() => duplicateElement(active.sectionId, active.element.id)}>
               Duplicate
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem
               className="text-red-600 focus:text-red-700"
+              disabled={Boolean(structureIssue)}
               onSelect={() => removeElement(active.sectionId, active.element.id)}
             >
               Delete
@@ -268,6 +292,46 @@ export function CanvasEditorContextMenu({
           </>
         )}
       </ContextMenuContent>
+  );
+}
+
+function openKeyboardMenu(event: KeyboardEvent<HTMLElement>) {
+  if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const node = event.target instanceof HTMLElement ? event.target : event.currentTarget;
+  const rect = node.getBoundingClientRect();
+  node.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: rect.left + 16, clientY: rect.bottom }));
+}
+
+/** The explicit row target is independent of whichever canvas element is selected. */
+export function LayerEditorContextMenu({ target, children }: { target: ContextTarget; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLDivElement>(null);
+  return (
+    <ContextMenu onOpenChange={setOpen}>
+      <ContextMenuTrigger asChild onKeyDown={openKeyboardMenu} onContextMenu={(event) => event.stopPropagation()}>
+        <div ref={trigger}>{children}</div>
+      </ContextMenuTrigger>
+      {open ? <EditorContextMenuContent target={target} onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        trigger.current?.querySelector<HTMLButtonElement>("[data-layer-select]")?.focus();
+      }} /> : null}
+    </ContextMenu>
+  );
+}
+
+export function CanvasEditorContextMenu({ children, pageId }: { children: ReactNode; pageId?: string | null }) {
+  const { page } = useEditor();
+  const [target, setTarget] = useState<ContextTarget | null>(null);
+  return (
+    <ContextMenu onOpenChange={(open) => { if (!open) setTarget(null); }}>
+      <ContextMenuTrigger asChild>
+        <div className="min-h-full" onKeyDown={openKeyboardMenu} onContextMenu={(event) => setTarget(resolveTargetFromEvent(event, page))}>
+          {children}
+        </div>
+      </ContextMenuTrigger>
+      <EditorContextMenuContent target={target} pageId={pageId} />
     </ContextMenu>
   );
 }

@@ -1,4 +1,4 @@
-import { allSectionElements } from "@/lib/slots";
+import { sectionElements } from "@/lib/variables";
 import { styleToCss } from "@/lib/styles";
 import type {
   BoxEdges,
@@ -21,7 +21,10 @@ export function cloneStyleProps(styles?: StyleProps): StyleProps {
 
 export function cloneNodeMeta<T extends NodeMeta>(
   node: T,
-): Pick<T, "className" | "htmlId" | "styles" | "responsive" | "states" | "animation"> {
+): Pick<
+  T,
+  "className" | "htmlId" | "styles" | "responsive" | "states" | "animation" | "variables" | "interactions"
+> {
   return {
     className: node.className,
     htmlId: node.htmlId,
@@ -40,6 +43,11 @@ export function cloneNodeMeta<T extends NodeMeta>(
         }
       : undefined,
     animation: node.animation ? { ...node.animation } : node.animation,
+    variables: node.variables?.map((variable) => structuredClone(variable)),
+    interactions: node.interactions?.map((binding) => ({
+      ...binding,
+      action: structuredClone(binding.action),
+    })),
   };
 }
 
@@ -120,17 +128,38 @@ export function collectStyledNodes(page: LandingPage | { sections: PageSection[]
   const nodes: Array<NodeMeta & { id: string }> = [];
   for (const section of page.sections) {
     nodes.push(section);
-    for (const { element } of allSectionElements(section)) nodes.push(element);
+    const walk = (elements: ReturnType<typeof sectionElements>) => {
+      for (const element of elements) {
+        nodes.push(element);
+        walk(element.children ?? []);
+      }
+    };
+    walk(sectionElements(section));
   }
   return nodes;
+}
+
+function preserveBackgroundWhenClearingTextGradient(styles?: StyleProps, inherited?: StyleProps) {
+  if (!styles || styles.textGradient !== "") return styles;
+  return {
+    ...styles,
+    background: styles.background ?? inherited?.background,
+    backgroundImage: styles.backgroundImage ?? inherited?.backgroundImage,
+  };
 }
 
 export function nodeStylesheet(nodes: Array<NodeMeta & { id: string }>): string {
   const rules: string[] = [];
   for (const node of nodes) {
-    const selector = `[data-editor-node="${node.id}"]`;
-    const tablet = stylePropsToCssText(node.responsive?.tablet);
-    const mobile = stylePropsToCssText(node.responsive?.mobile);
+    const id = (node.styleSourceId ?? node.id).replace(/[\\"\n\r\f]/g, (character) => `\\${character.charCodeAt(0).toString(16)} `);
+    const selector = `:is([data-editor-node="${id}"], [data-style-source="${id}"])`;
+    const tabletStyles = preserveBackgroundWhenClearingTextGradient(node.responsive?.tablet, node.styles);
+    const mobileStyles = preserveBackgroundWhenClearingTextGradient(
+      node.responsive?.mobile,
+      mergeStyles(node.styles, node.responsive?.tablet),
+    );
+    const tablet = stylePropsToCssText(tabletStyles, true);
+    const mobile = stylePropsToCssText(mobileStyles, true);
     if (tablet) rules.push(`@media (max-width: 1023px) { ${selector} { ${tablet} } }`);
     if (mobile) rules.push(`@media (max-width: 639px) { ${selector} { ${mobile} } }`);
     const hover = stylePropsToCssText(node.states?.hover, true);

@@ -9,6 +9,7 @@ export type StylePreviewValue = {
   breakpoint: Breakpoint;
   previewState: InteractionState;
   live: boolean;
+  interactivePreview?: boolean;
   previewNodeId?: string | null;
 };
 
@@ -16,6 +17,7 @@ const StylePreviewContext = createContext<StylePreviewValue>({
   breakpoint: "desktop",
   previewState: "default",
   live: true,
+  interactivePreview: false,
   previewNodeId: null,
 });
 
@@ -35,7 +37,7 @@ export function useStylePreview() {
 
 function previewFor(node: (NodeMeta & { id?: string }) | null | undefined, preview: StylePreviewValue): InteractionState {
   if (!node || preview.live || preview.previewState === "default") return "default";
-  if (preview.previewNodeId && node.id && node.id !== preview.previewNodeId) return "default";
+  if (preview.previewNodeId && node.id && node.id !== preview.previewNodeId && node.styleSourceId !== preview.previewNodeId) return "default";
   return preview.previewState;
 }
 

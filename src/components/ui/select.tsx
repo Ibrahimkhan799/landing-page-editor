@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { useEditorTheme } from "@/components/editor/editor-theme";
 import { cn } from "@/lib/utils";
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
@@ -72,11 +73,13 @@ function SelectContent({
   position = "popper",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const editorDark = useEditorTheme();
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         className={cn(
           "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+          editorDark && "dark editor-ui border-zinc-700 bg-zinc-900 text-zinc-100",
           position === "popper" && "data-[side=bottom]:translate-y-1",
           className,
         )}

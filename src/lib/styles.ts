@@ -34,11 +34,23 @@ export function styleToCss(styles?: StyleProps): CSSProperties {
   assign(out, "minHeight", styles.minHeight);
   assign(out, "maxHeight", styles.maxHeight);
   assign(out, "color", styles.color);
-  if (styles.background) {
-    if (/gradient|url\(/i.test(styles.background)) assign(out, "backgroundImage", styles.background);
-    else assign(out, "backgroundColor", styles.background);
+  const backgroundPaint = styles.background && /gradient|url\(/i.test(styles.background) ? styles.background : "";
+  if (styles.background && !backgroundPaint) assign(out, "backgroundColor", styles.background);
+  const backgroundImage = styles.backgroundImage || backgroundPaint;
+  assign(out, "backgroundImage", backgroundImage);
+  if (Object.prototype.hasOwnProperty.call(styles, "textGradient")) {
+    if (styles.textGradient) {
+      assign(out, "backgroundImage", [styles.textGradient, backgroundImage].filter(Boolean).join(", "));
+      assign(out, "backgroundClip", "text, border-box");
+      assign(out, "WebkitBackgroundClip", "text, border-box");
+      assign(out, "WebkitTextFillColor", "transparent");
+    } else {
+      assign(out, "backgroundImage", backgroundImage || "none");
+      assign(out, "backgroundClip", "border-box");
+      assign(out, "WebkitBackgroundClip", "border-box");
+      assign(out, "WebkitTextFillColor", "currentColor");
+    }
   }
-  assign(out, "backgroundImage", styles.backgroundImage);
   assign(out, "fontFamily", styles.fontFamily);
   assign(out, "fontSize", styles.fontSize);
   assign(out, "fontWeight", styles.fontWeight);

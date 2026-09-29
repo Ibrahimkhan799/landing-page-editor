@@ -21,11 +21,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AnimateHost, renderAnimatedText } from "@/components/landing/animate";
+import { LandingRuntimeScope, useLandingRuntime } from "@/components/landing/runtime";
 import {
   useNodeCss,
   usePreviewStateAttr,
 } from "@/components/landing/style-preview";
-import { bindElementToItem } from "@/lib/component-slots";
+import { bindElementsToItem, listItemKey, listItemValues } from "@/lib/component-slots";
+import { normalizeConditionalElement } from "@/lib/migrate";
 import { isContainerElement } from "@/lib/slots";
 import { cn } from "@/lib/utils";
 import type { PageElement } from "@/lib/types";
@@ -50,38 +52,233 @@ function asBool(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+const SVG_TAGS: Record<string, string> = {
+  svg: "svg",
+  g: "g",
+  path: "path",
+  circle: "circle",
+  ellipse: "ellipse",
+  rect: "rect",
+  line: "line",
+  polyline: "polyline",
+  polygon: "polygon",
+  text: "text",
+  tspan: "tspan",
+  defs: "defs",
+  lineargradient: "linearGradient",
+  radialgradient: "radialGradient",
+  stop: "stop",
+  clippath: "clipPath",
+  mask: "mask",
+  pattern: "pattern",
+  symbol: "symbol",
+  use: "use",
+  title: "title",
+  desc: "desc",
+};
+
+const SVG_ATTRIBUTES: Record<string, string> = {
+  xmlns: "xmlns",
+  "xmlns:xlink": "xmlns:xlink",
+  viewbox: "viewBox",
+  width: "width",
+  height: "height",
+  x: "x",
+  y: "y",
+  x1: "x1",
+  y1: "y1",
+  x2: "x2",
+  y2: "y2",
+  cx: "cx",
+  cy: "cy",
+  r: "r",
+  rx: "rx",
+  ry: "ry",
+  d: "d",
+  points: "points",
+  fill: "fill",
+  "fill-opacity": "fill-opacity",
+  "fill-rule": "fill-rule",
+  stroke: "stroke",
+  "stroke-width": "stroke-width",
+  "stroke-linecap": "stroke-linecap",
+  "stroke-linejoin": "stroke-linejoin",
+  "stroke-opacity": "stroke-opacity",
+  "clip-rule": "clip-rule",
+  opacity: "opacity",
+  transform: "transform",
+  "vector-effect": "vector-effect",
+  preserveaspectratio: "preserveAspectRatio",
+  id: "id",
+  class: "class",
+  role: "role",
+  "aria-hidden": "aria-hidden",
+  "aria-label": "aria-label",
+  focusable: "focusable",
+  gradientunits: "gradientUnits",
+  gradienttransform: "gradientTransform",
+  offset: "offset",
+  "stop-color": "stop-color",
+  "stop-opacity": "stop-opacity",
+  "clip-path": "clip-path",
+  mask: "mask",
+  patternunits: "patternUnits",
+  patterncontentunits: "patternContentUnits",
+  href: "href",
+  "xlink:href": "xlink:href",
+  "text-anchor": "text-anchor",
+  "font-family": "font-family",
+  "font-size": "font-size",
+  "font-weight": "font-weight",
+  dx: "dx",
+  dy: "dy",
+  "dominant-baseline": "dominant-baseline",
+};
+
+function escapeSvgValue(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function safeSvgAttribute(name: string, value: string) {
+  const normalized = name.toLowerCase();
+  const outputName = SVG_ATTRIBUTES[normalized];
+  if (!outputName || /[\u0000-\u001f\u007f]/.test(value)) return null;
+
+  if (normalized === "href" || normalized === "xlink:href") {
+    if (!/^#[A-Za-z_][\w:.-]*$/.test(value.trim())) return null;
+  }
+
+  if (["fill", "stroke", "clip-path", "mask"].includes(normalized) && /url\s*\(/i.test(value)) {
+    if (!/^url\(\s*#[A-Za-z_][\w:.-]*\s*\)$/.test(value.trim())) return null;
+  }
+
+  if (/\b(?:javascript|vbscript|data)\s*:/i.test(value)) return null;
+  return `${outputName}="${escapeSvgValue(value)}"`;
+}
+
+function findSvgTagEnd(source: string, start: number) {
+  let quote = "";
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === ">") return index;
+  }
+  return -1;
+}
+
+function sanitizeSvgTag(token: string) {
+  const closing = token.match(/^<\s*\/\s*([A-Za-z][\w-]*)\s*>$/);
+  if (closing) {
+    const tag = SVG_TAGS[closing[1].toLowerCase()];
+    return tag ? `</${tag}>` : "";
+  }
+
+  const opening = token.match(/^<\s*([A-Za-z][\w-]*)/);
+  if (!opening) return "";
+  const tag = SVG_TAGS[opening[1].toLowerCase()];
+  if (!tag) return "";
+
+  const attributes: string[] = [];
+  const attributeSource = token.slice(opening[0].length, token.length - 1).replace(/\/\s*$/, "");
+  const attributePattern = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+  for (const match of attributeSource.matchAll(attributePattern)) {
+    const attribute = safeSvgAttribute(match[1], match[2] ?? match[3] ?? match[4] ?? "");
+    if (attribute) attributes.push(attribute);
+  }
+  const suffix = /\/\s*>$/.test(token) ? "/>" : ">";
+  return `<${tag}${attributes.length ? ` ${attributes.join(" ")}` : ""}${suffix}`;
+}
+
+/** Sanitizes stored SVG without relying on browser-only APIs during server rendering. */
+export function sanitizeSvgMarkup(markup: string) {
+  let output = "";
+  let cursor = 0;
+
+  while (cursor < markup.length) {
+    const open = markup.indexOf("<", cursor);
+    if (open === -1) {
+      output += escapeSvgValue(markup.slice(cursor));
+      break;
+    }
+    output += escapeSvgValue(markup.slice(cursor, open));
+    const close = findSvgTagEnd(markup, open);
+    if (close === -1) {
+      output += "&lt;";
+      cursor = open + 1;
+      continue;
+    }
+    output += sanitizeSvgTag(markup.slice(open, close + 1));
+    cursor = close + 1;
+  }
+
+  const root = output.search(/<svg(?:\s|>)/);
+  return root === -1 ? "" : output.slice(root).trim();
+}
+
 /**
  * Extracts the CSS properties that must live on the wrapper div (the direct flex / grid child)
  * rather than only on the inner element. Without this, `shrink-0` and a fixed `width` on the
  * wrapper block the parent's flex algorithm and cause overflow in horizontal layouts.
  */
-function childWrapperStyle(child: PageElement): CSSProperties {
-  const s = child.styles;
-  if (!s) return {};
+function childWrapperStyle(s: CSSProperties): CSSProperties {
   const style: CSSProperties = {};
-  // Sizing — on the wrapper so flex/grid measure the right size
+  if (s.position === "absolute" || s.position === "fixed") return style;
+  // These properties must live on the direct flex/grid child wrapper.
   if (s.width) style.width = s.width;
   if (s.minWidth) style.minWidth = s.minWidth;
   if (s.maxWidth) style.maxWidth = s.maxWidth;
   if (s.height && s.height !== "auto") style.height = s.height;
-  // Flex item properties — must be on the direct flex child
-  const grow = parseFloat(s.flexGrow ?? "");
-  if (!isNaN(grow)) style.flexGrow = grow;
-  const shrink = parseFloat(s.flexShrink ?? "");
-  if (!isNaN(shrink)) style.flexShrink = shrink;
+  if (s.flexGrow !== undefined) style.flexGrow = s.flexGrow;
+  if (s.flexShrink !== undefined) style.flexShrink = s.flexShrink;
   if (s.flexBasis) style.flexBasis = s.flexBasis;
   if (s.alignSelf && s.alignSelf !== "auto") style.alignSelf = s.alignSelf;
-  // Grid item placement
   if (s.gridColumn) style.gridColumn = s.gridColumn;
   if (s.gridRow) style.gridRow = s.gridRow;
-  // Margin needs to be on the wrapper so it participates in the parent's layout
-  if (s.margin) {
-    if (s.margin.top) style.marginTop = s.margin.top;
-    if (s.margin.right) style.marginRight = s.margin.right;
-    if (s.margin.bottom) style.marginBottom = s.margin.bottom;
-    if (s.margin.left) style.marginLeft = s.margin.left;
-  }
+  if (s.marginTop) style.marginTop = s.marginTop;
+  if (s.marginRight) style.marginRight = s.marginRight;
+  if (s.marginBottom) style.marginBottom = s.marginBottom;
+  if (s.marginLeft) style.marginLeft = s.marginLeft;
   return style;
+}
+
+function ElementLayoutWrapper({
+  element,
+  className,
+  children,
+}: {
+  element: PageElement;
+  className?: string;
+  children: ReactNode;
+}) {
+  const runtime = useLandingRuntime(element.id);
+  const resolved = {
+    ...useNodeCss(element),
+    ...runtime.styleOverrideFor(element.id),
+  };
+  if (runtime.isElementRemoved(element.id) || resolved.display === "none") return null;
+
+  return (
+    <div className={className} style={childWrapperStyle(resolved)}>
+      {children}
+    </div>
+  );
 }
 
 export function LandingElement({
@@ -97,7 +294,13 @@ export function LandingElement({
   renderFrameEmpty?: (parent: PageElement) => ReactNode;
   wrapChildren?: (children: ReactNode, parent: PageElement) => ReactNode;
 }) {
-  const p = element.props;
+  const runtime = useLandingRuntime(element.id);
+  const { props: p, errors: bindingErrors, condition: conditionMatches } = runtime.resolveElementProps(element);
+  const textProp = (key: string, fallback = "") => {
+    const value = asString(p[key], fallback);
+    // Explicit bindings are data, not a second template to expand.
+    return element.bindings?.[key] ? value : runtime.interpolate(value);
+  };
   const align = asString(p.align, "left");
   const alignClass =
     align === "center"
@@ -105,16 +308,28 @@ export function LandingElement({
       : align === "right"
         ? "text-right ml-auto"
         : "";
-  const nodeCss = useNodeCss(element);
+  const nodeCss = {
+    ...useNodeCss(element),
+    ...runtime.styleOverrideFor(element.id),
+  };
   const previewState = usePreviewStateAttr(element);
+  const interactionProps = runtime.interactionHandlers(element, interactive);
   const paintClass = cn(!interactive && "cursor-default select-none");
-  const meta = {
+  const nodeAttributes = {
     id: element.htmlId || undefined,
-    className: cn(element.className, paintClass) || undefined,
-    style: nodeCss,
     "data-editor-node": element.id,
+    "data-style-source": element.styleSourceId,
+    "data-binding-error": bindingErrors.length ? bindingErrors.join("; ") : undefined,
     "data-preview-state": previewState,
   };
+  const meta = {
+    ...interactionProps,
+    ...nodeAttributes,
+    className: cn(element.className, paintClass) || undefined,
+    style: nodeCss,
+  };
+
+  if (runtime.isElementRemoved(element.id)) return null;
 
   switch (element.type) {
     case "heading": {
@@ -136,7 +351,7 @@ export function LandingElement({
             ...nodeCss,
           }}
         >
-          {renderAnimatedText(element, asString(p.text, "Heading"))}
+          {renderAnimatedText(element, textProp("text", "Heading"))}
         </Tag>
       );
     }
@@ -152,14 +367,14 @@ export function LandingElement({
           )}
           style={{ color: "var(--lp-muted-fg)", margin: 0, ...nodeCss }}
         >
-          {renderAnimatedText(element, asString(p.text, ""))}
+          {renderAnimatedText(element, textProp("text"))}
         </p>
       );
     case "button": {
       const variant = asString(p.variant, "primary");
       const size = asString(p.size, "md");
       const disabled = asBool(p.disabled);
-      const href = asString(p.href, "#");
+      const href = textProp("href", "#");
       const className = cn(
         "font-medium transition-colors",
         size === "sm" && "h-8 px-3 text-xs",
@@ -191,9 +406,8 @@ export function LandingElement({
         ...nodeCss,
       };
       const shared = {
-        id: element.htmlId || undefined,
-        "data-editor-node": element.id,
-        "data-preview-state": previewState,
+        ...(disabled ? {} : interactionProps),
+        ...nodeAttributes,
         className: cn(
           className,
           "inline-flex items-center justify-center px-4 py-2",
@@ -204,28 +418,35 @@ export function LandingElement({
       if (!interactive || disabled) {
         return (
           <span {...shared}>
-            {renderAnimatedText(element, asString(p.label, "Button"))}
+            {renderAnimatedText(element, textProp("label", "Button"))}
           </span>
+        );
+      }
+      if (element.interactions?.some((binding) => binding.trigger === "click")) {
+        return (
+          <button {...shared} type="button">
+            {renderAnimatedText(element, textProp("label", "Button"))}
+          </button>
         );
       }
       return (
         <a {...shared} href={href}>
-          {renderAnimatedText(element, asString(p.label, "Button"))}
+          {renderAnimatedText(element, textProp("label", "Button"))}
         </a>
       );
     }
     case "input": {
-      const label = typeof p.label === "string" ? p.label.trim() : "";
+      const label = textProp("label").trim();
       return (
         <div className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
           <Input
-            id={element.htmlId || undefined}
-            data-editor-node={element.id}
-            data-preview-state={previewState}
+            {...interactionProps}
+            {...nodeAttributes}
             className={cn("h-8 shadow-none", element.className)}
             type={asString(p.inputType, "text")}
-            placeholder={asString(p.placeholder)}
+            placeholder={textProp("placeholder")}
+            defaultValue={p.value === undefined ? undefined : element.bindings?.value ? textProp("value") : runtime.interpolate(p.value)}
             required={asBool(p.required)}
             disabled={!interactive}
             readOnly={!interactive}
@@ -236,16 +457,16 @@ export function LandingElement({
       );
     }
     case "textarea": {
-      const label = typeof p.label === "string" ? p.label.trim() : "";
+      const label = textProp("label").trim();
       return (
         <div className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
           <Textarea
-            id={element.htmlId || undefined}
-            data-editor-node={element.id}
-            data-preview-state={previewState}
+            {...interactionProps}
+            {...nodeAttributes}
             className={cn("min-h-20 shadow-none", element.className)}
-            placeholder={asString(p.placeholder)}
+            placeholder={textProp("placeholder")}
+            defaultValue={p.value === undefined ? undefined : element.bindings?.value ? textProp("value") : runtime.interpolate(p.value)}
             rows={asNumber(p.rows, 4)}
             disabled={!interactive}
             readOnly={!interactive}
@@ -256,23 +477,26 @@ export function LandingElement({
       );
     }
     case "select": {
-      const label = typeof p.label === "string" ? p.label.trim() : "";
-      const options = asString(p.options, "Option A\nOption B")
+      const label = textProp("label").trim();
+      const options = textProp("options", "Option A\nOption B")
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean);
+      const handlesChange = interactive && element.interactions?.some((binding) => binding.trigger === "change");
+      const selectInteractionProps = { ...interactionProps, onChange: undefined };
       return (
-        <div className="grid w-full gap-1">
+        <div {...selectInteractionProps} className="grid w-full gap-1">
           {label ? <Label className="text-xs">{label}</Label> : null}
-          <Select disabled={!interactive}>
+          <Select
+            disabled={!interactive}
+            onValueChange={handlesChange ? (value) => runtime.runInteractions(element, "change", value) : undefined}
+          >
             <SelectTrigger
-              id={element.htmlId || undefined}
-              data-editor-node={element.id}
-              data-preview-state={previewState}
+              {...nodeAttributes}
               className={cn("h-8 shadow-none", element.className)}
               style={{ borderRadius: "var(--lp-radius)", ...nodeCss }}
             >
-              <SelectValue placeholder={asString(p.placeholder, "Choose")} />
+              <SelectValue placeholder={textProp("placeholder", "Choose")} />
             </SelectTrigger>
             <SelectContent>
               {options.map((option) => (
@@ -285,29 +509,31 @@ export function LandingElement({
         </div>
       );
     }
-    case "checkbox":
+    case "checkbox": {
+      const handlesChange = interactive && element.interactions?.some((binding) => binding.trigger === "change");
+      const checkboxInteractionProps = { ...interactionProps, onChange: undefined };
       return (
         <label
+          {...checkboxInteractionProps}
           className={cn("flex items-center gap-2 text-sm", element.className)}
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
+          {...nodeAttributes}
           style={nodeCss}
         >
           <Checkbox
             disabled={!interactive}
             defaultChecked={asBool(p.checked)}
+            onCheckedChange={handlesChange ? (checked) => runtime.runInteractions(element, "change", checked) : undefined}
           />
-          {asString(p.label, "Checkbox")}
+          {textProp("label", "Checkbox")}
         </label>
       );
+    }
     case "badge": {
       const variant = asString(p.variant, "primary");
       return (
         <Badge
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
+          {...interactionProps}
+          {...nodeAttributes}
           className={element.className}
           style={{
             ...(variant === "primary"
@@ -329,7 +555,7 @@ export function LandingElement({
             ...nodeCss,
           }}
         >
-          {asString(p.text, "Badge")}
+          {textProp("text", "Badge")}
         </Badge>
       );
     }
@@ -337,11 +563,10 @@ export function LandingElement({
       return (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
-          src={asString(p.src)}
-          alt={asString(p.alt, "")}
+          {...interactionProps}
+          {...nodeAttributes}
+          src={textProp("src")}
+          alt={textProp("alt")}
           className={cn(
             "w-full object-cover",
             asBool(p.rounded, true) && "rounded-[var(--lp-radius)]",
@@ -353,10 +578,9 @@ export function LandingElement({
     case "video":
       return (
         <video
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
-          src={asString(p.src)}
+          {...interactionProps}
+          {...nodeAttributes}
+          src={textProp("src")}
           className={cn("w-full rounded-[var(--lp-radius)]", element.className)}
           style={nodeCss}
           controls={interactive}
@@ -367,9 +591,8 @@ export function LandingElement({
     case "separator":
       return (
         <Separator
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
+          {...interactionProps}
+          {...nodeAttributes}
           className={cn(
             asString(p.spacing) === "lg" ? "my-8" : "my-4",
             element.className,
@@ -377,6 +600,30 @@ export function LandingElement({
           style={nodeCss}
         />
       );
+    case "shape": {
+      const label = textProp("label");
+      return (
+        <div
+          {...meta}
+          aria-hidden={label ? undefined : true}
+          aria-label={label || undefined}
+          role={label ? "img" : undefined}
+        />
+      );
+    }
+    case "svg": {
+      const label = textProp("label", "SVG graphic");
+      const markup = sanitizeSvgMarkup(textProp("markup"));
+      return (
+        <div
+          {...meta}
+          aria-label={label || undefined}
+          className={cn("inline-block [&>svg]:block [&>svg]:max-w-full", element.className, paintClass)}
+          role={label ? "img" : undefined}
+          dangerouslySetInnerHTML={{ __html: markup }}
+        />
+      );
+    }
     case "frame": {
       const body = (
         <>
@@ -384,10 +631,10 @@ export function LandingElement({
             const hasW = Boolean(child.styles?.width);
             const isCont = isContainerElement(child.type);
             return (
-              <div
+              <ElementLayoutWrapper
                 key={child.id}
+                element={child}
                 className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
-                style={childWrapperStyle(child)}
               >
                 {renderChild ? (
                   renderChild(child, element)
@@ -396,7 +643,7 @@ export function LandingElement({
                     <LandingElement element={child} interactive={interactive} />
                   </AnimateHost>
                 )}
-              </div>
+              </ElementLayoutWrapper>
             );
           })}
           {renderFrameEmpty?.(element) ?? null}
@@ -432,10 +679,10 @@ export function LandingElement({
             const hasW = Boolean(child.styles?.width);
             const isCont = isContainerElement(child.type);
             return (
-              <div
+              <ElementLayoutWrapper
                 key={child.id}
+                element={child}
                 className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
-                style={childWrapperStyle(child)}
               >
                 {renderChild ? (
                   renderChild(child, element)
@@ -444,7 +691,7 @@ export function LandingElement({
                     <LandingElement element={child} interactive={interactive} />
                   </AnimateHost>
                 )}
-              </div>
+              </ElementLayoutWrapper>
             );
           })}
           {renderFrameEmpty?.(element) ?? null}
@@ -471,10 +718,59 @@ export function LandingElement({
         </div>
       );
     }
+    case "conditional": {
+      const editing = Boolean(renderChild || renderFrameEmpty || wrapChildren);
+      const visible = !runtime.enabled || conditionMatches === true;
+      const branches = normalizeConditionalElement(element).children ?? [];
+      const kids = editing || !runtime.enabled ? branches : branches.filter((child) => child.props.branch === (visible ? "then" : "else"));
+
+      const body = (
+        <>
+          {kids.map((child) => {
+            const hasW = Boolean(child.styles?.width);
+            const isCont = isContainerElement(child.type);
+            return (
+              <ElementLayoutWrapper
+                key={child.id}
+                element={child}
+                className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
+              >
+                {renderChild ? (
+                  renderChild(child, element)
+                ) : (
+                  <AnimateHost node={child}>
+                    <LandingElement element={child} interactive={interactive} />
+                  </AnimateHost>
+                )}
+              </ElementLayoutWrapper>
+            );
+          })}
+          {renderFrameEmpty?.(element) ?? null}
+        </>
+      );
+      return (
+        <div
+          {...meta}
+          className={cn(
+            "relative w-full min-h-[48px]",
+            !kids.length && !renderFrameEmpty && "min-h-[72px]",
+            element.className,
+          )}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: "12px",
+            ...nodeCss,
+          }}
+          data-lp-conditional={editing ? "editing" : visible ? "then" : "else"}
+        >
+          {wrapChildren ? wrapChildren(body, element) : body}
+        </div>
+      );
+    }
     case "list": {
-      const items = Array.isArray(p.items)
-        ? (p.items as Record<string, unknown>[])
-        : [];
+      const items: unknown[] = Array.isArray(p.items) ? p.items : [];
       const columns = Math.max(1, asNumber(p.columns, 3));
       const gap = asString(p.gap, "16px");
       const template = element.children ?? [];
@@ -489,10 +785,10 @@ export function LandingElement({
               const hasW = Boolean(child.styles?.width);
               const isCont = isContainerElement(child.type);
               return (
-                <div
+                <ElementLayoutWrapper
                   key={child.id}
+                  element={child}
                   className={cn("min-w-0", !hasW && !isCont && "w-max max-w-full")}
-                  style={childWrapperStyle(child)}
                 >
                   {renderChild ? (
                     renderChild(child, element)
@@ -501,7 +797,7 @@ export function LandingElement({
                       <LandingElement element={child} interactive={interactive} />
                     </AnimateHost>
                   )}
-                </div>
+                </ElementLayoutWrapper>
               );
             })}
             {renderFrameEmpty?.(element) ?? null}
@@ -545,23 +841,24 @@ export function LandingElement({
                 {items
                   .slice(0, Math.min(items.length, columns * 2))
                   .map((item, index) => {
-                    const bound = template.map((child) =>
-                      bindElementToItem(child, item, index),
-                    );
+                    const key = listItemKey(items, index);
+                    const bound = bindElementsToItem(template, item, index, `${element.id}:preview:${key}`, !runtime.enabled);
                     return (
-                      <div key={index} className="min-w-0">
+                      <LandingRuntimeScope key={key} nodeId={element.id} elements={bound} values={listItemValues(item, index)}>
+                      <div className="min-w-0">
                         {bound.map((child) => (
-                          <div
+                          <ElementLayoutWrapper
                             key={child.id}
+                            element={child}
                             className={cn("block min-w-0", !child.styles?.width && "w-full")}
-                            style={childWrapperStyle(child)}
                           >
                             <AnimateHost node={child}>
                               <LandingElement element={child} interactive={false} />
                             </AnimateHost>
-                          </div>
+                          </ElementLayoutWrapper>
                         ))}
                       </div>
+                      </LandingRuntimeScope>
                     );
                   })}
               </div>
@@ -585,13 +882,14 @@ export function LandingElement({
           }}
         >
           {items.map((item, index) => {
-            const bound =
-              template.length > 0
-                ? template.map((child) => bindElementToItem(child, item, index))
-                : null;
+            const key = listItemKey(items, index);
+            const bound = template.length > 0
+              ? bindElementsToItem(template, item, index, `${element.id}:row:${key}`, !runtime.enabled)
+              : null;
             if (bound) {
               return (
-                <div key={index} className="min-w-0">
+                <LandingRuntimeScope key={key} nodeId={element.id} elements={bound} values={listItemValues(item, index)}>
+                <div className="min-w-0">
                   {bound.map((child) => (
                     <AnimateHost
                       key={child.id}
@@ -605,11 +903,13 @@ export function LandingElement({
                     </AnimateHost>
                   ))}
                 </div>
+                </LandingRuntimeScope>
               );
             }
+            const record = asRecord(item) ?? {};
             return (
               <div
-                key={index}
+                key={key}
                 className="rounded-xl border bg-white p-5 shadow-sm"
                 style={{
                   borderColor: "var(--lp-border)",
@@ -620,19 +920,19 @@ export function LandingElement({
                   className="mb-3 grid size-8 place-items-center rounded-md text-sm font-semibold text-white"
                   style={{ backgroundColor: "var(--lp-primary)" }}
                 >
-                  {String(item.badge ?? index + 1)}
+                  {String(record.badge ?? index + 1)}
                 </div>
                 <h3
                   className="text-base font-semibold"
                   style={{ fontFamily: "var(--lp-font-heading)" }}
                 >
-                  {String(item.title ?? `Item ${index + 1}`)}
+                  {String(record.title ?? `Item ${index + 1}`)}
                 </h3>
                 <p
                   className="mt-1 text-sm"
                   style={{ color: "var(--lp-muted-fg)" }}
                 >
-                  {String(item.body ?? "")}
+                  {String(record.body ?? "")}
                 </p>
               </div>
             );
@@ -643,9 +943,8 @@ export function LandingElement({
     case "card":
       return (
         <Card
-          id={element.htmlId || undefined}
-          data-editor-node={element.id}
-          data-preview-state={previewState}
+          {...interactionProps}
+          {...nodeAttributes}
           className={cn("max-w-sm", element.className)}
           style={{
             borderRadius: "var(--lp-radius)",
@@ -655,17 +954,17 @@ export function LandingElement({
         >
           <CardHeader>
             <CardTitle style={{ fontFamily: "var(--lp-font-heading)" }}>
-              {asString(p.title)}
+              {textProp("title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm" style={{ color: "var(--lp-muted-fg)" }}>
-              {asString(p.body)}
+              {textProp("body")}
             </p>
           </CardContent>
           {asString(p.footer) ? (
             <CardFooter className="text-sm font-medium">
-              {asString(p.footer)}
+              {textProp("footer")}
             </CardFooter>
           ) : null}
         </Card>
@@ -686,15 +985,15 @@ export function ElementStack({
   return (
     <div className="mt-6 flex flex-col items-start gap-4">
       {elements.map((element) => (
-        <div
+        <ElementLayoutWrapper
           key={element.id}
+          element={element}
           className={cn("min-w-0", !element.styles?.width && !isContainerElement(element.type) && "w-max max-w-full")}
-          style={childWrapperStyle(element)}
         >
           <AnimateHost node={element}>
             <LandingElement element={element} interactive={interactive} />
           </AnimateHost>
-        </div>
+        </ElementLayoutWrapper>
       ))}
     </div>
   );
