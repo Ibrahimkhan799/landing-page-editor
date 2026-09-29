@@ -1,6 +1,6 @@
 "use client";
 
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { useEditor } from "@/components/editor/editor-context";
 import { frameSlotId } from "@/lib/slots";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ export function FrameDropZone({
   label?: string;
 }) {
   const { selection, setSelection } = useEditor();
+  const { active } = useDndContext();
   const slotId = frameSlotId(parentId);
   const selected = selection.kind === "slot" && selection.sectionId === sectionId && selection.slotId === slotId;
   const { setNodeRef } = useDroppable({
@@ -33,9 +34,9 @@ export function FrameDropZone({
         data-drop-container={parentId}
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-0 z-[4] rounded-[inherit]",
-          "[[data-dragging]_&]:pointer-events-auto",
-          selected && "shadow-[inset_0_0_0_1px_rgba(13,153,255,0.35)] [[data-dragging]_&]:shadow-none",
+          "pointer-events-none absolute inset-0 z-4 rounded-[inherit]",
+          active && "pointer-events-auto",
+          selected && "shadow-[inset_0_0_0_1px_rgba(13,153,255,0.35)]",
         )}
       />
     );
