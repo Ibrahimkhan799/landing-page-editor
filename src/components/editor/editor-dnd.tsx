@@ -450,15 +450,22 @@ export function EditorDnd({ children }: { children: ReactNode }) {
     const activeKind = activeData?.kind;
     if (args.pointerCoordinates) pointerRef.current = args.pointerCoordinates;
     nodesRef.current.clear();
-    const droppableContainers = args.droppableContainers.filter((container) => {
-      if (container.node.current)
-        nodesRef.current.set(container.id, container.node.current);
-      const targetData = container.data.current as DndData | undefined;
-      return (
-        container.id !== args.active.id &&
-        Boolean(activeData && targetData && validTarget(activeData, targetData))
-      );
-    });
+    // `droppableContainers` is a DroppableContainersMap, not an array. Calling
+    // Array.prototype.filter on it throws as soon as a drag starts, which
+    // prevents collision detection, placement hints, and drop handlers from
+    // receiving a target. Start with its enabled containers before filtering
+    // to the targets supported by this editor.
+    const droppableContainers = args.droppableContainers
+      .getEnabled()
+      .filter((container) => {
+        if (container.node.current)
+          nodesRef.current.set(container.id, container.node.current);
+        const targetData = container.data.current as DndData | undefined;
+        return (
+          container.id !== args.active.id &&
+          Boolean(activeData && targetData && validTarget(activeData, targetData))
+        );
+      });
     if (!args.pointerCoordinates && keyboardRef.current) {
       const keyboard = keyboardRef.current;
       const target = droppableContainers.find(
